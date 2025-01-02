@@ -1,0 +1,16 @@
+# Check Commit Messages, to ensure they are valid and follow conventional commits (https://l.arvid.tech/conventional-commits)
+name: "Conventional Commits: PR Title"
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+jobs:
+  check-pr-title:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check PR title
+        run: ./.ci/cc-pr-title.sh "${{ github.event.pull_request.title }}"
