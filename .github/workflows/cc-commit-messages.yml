@@ -1,0 +1,22 @@
+# Check Commit Messages, to ensure they are valid and follow conventional commits (https://l.arvid.tech/conventional-commits)
+name: "Conventional Commits: Commit Messages"
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+  pull_request:
+    branches:
+      - main
+      - dev
+
+jobs:
+  cc-commit-messages:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Important to fetch all history
+      - name: Check commit messages
+        run: .ci/cc-commit-messages.sh
