@@ -84,39 +84,46 @@ export default component$(() => {
   );
 
   return (
-    <div class="container mx-auto p-4">
-      <h1 class="mb-4 text-2xl font-bold">Analyze Robots.txt</h1>
-      <div class="mb-4 flex">
-        <input
-          type="text"
-          bind:value={url}
-          placeholder="Enter website URL"
-          class="flex-grow rounded-l border p-2"
-        />
-        <button
-          onClick$={() => analyzeRobotsTxtFile(url.value)}
-          class="rounded-r bg-blue-500 p-2 text-white transition-colors hover:bg-blue-600 disabled:bg-blue-300"
-          disabled={isLoading.value}
-        >
-          {isLoading.value ? "Analyzing..." : "Analyze"}
-        </button>
+    <div class="max-w-3xl mx-auto">
+      <h1 class="text-4xl font-semibold tracking-tight text-gray-900 mb-8">Analyze Your Robots.txt</h1>
+      <div class="mb-8">
+        <div class="flex gap-2">
+          <input
+            type="text"
+            bind:value={url}
+            placeholder="Enter website URL (e.g., example.com)"
+            class="flex-grow rounded-full border border-gray-300 px-6 py-4 text-base shadow-[0_2px_8px_rgba(0,0,0,0.04)] hover:border-gray-400 focus:border-black focus:ring-1 focus:ring-black focus:shadow-none transition-all"
+          />
+          <button
+            onClick$={() => analyzeRobotsTxtFile(url.value)}
+            class="rounded-full bg-black px-8 py-4 text-base font-semibold text-white shadow-sm hover:bg-gray-800 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+            disabled={isLoading.value}
+          >
+            {isLoading.value ? "Analyzing..." : "Analyze"}
+          </button>
+        </div>
       </div>
+
       {error.value && (
-        <div class="mb-4 rounded border border-red-400 bg-red-100 px-4 py-3 text-red-700">
+        <div class="mb-8 rounded-2xl border border-red-200 bg-red-50 px-6 py-4 text-sm text-red-600">
           {error.value}
         </div>
       )}
+
       {isLoading.value && (
-        <div class="text-center">
-          <div class="inline-block h-8 w-8 animate-spin rounded-full border-b-2 border-t-2 border-blue-500"></div>
+        <div class="flex justify-center py-12">
+          <div class="h-8 w-8 animate-spin rounded-full border-[3px] border-black border-t-transparent"></div>
         </div>
       )}
+
       {result.value && (
-        <div class="mt-4">
-          <h2 class="mb-2 text-xl font-semibold">Analysis:</h2>
-          <pre class="overflow-x-auto whitespace-pre-wrap rounded bg-gray-100 p-4">
-            {result.value}
-          </pre>
+        <div class="mt-8 space-y-6">
+          <h2 class="text-2xl font-semibold text-gray-900">Analysis Results</h2>
+          <div class="overflow-x-auto rounded-2xl bg-gray-50 p-6">
+            <pre class="whitespace-pre-wrap text-sm text-gray-700">
+              {result.value}
+            </pre>
+          </div>
         </div>
       )}
     </div>
