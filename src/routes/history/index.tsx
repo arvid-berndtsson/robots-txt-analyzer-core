@@ -1,4 +1,4 @@
-import { component$ } from "@builder.io/qwik";
+import { component$, useSignal, useOnDocument, $ } from "@builder.io/qwik";
 import type { DocumentHead } from "@builder.io/qwik-city";
 
 // This would typically come from a server/API
@@ -49,26 +49,67 @@ const exampleUrls = [
   "techcrunch.com", "wired.com", "vice.com", "vox.com"
 ];
 
-// Create entries with timestamps (this would normally be done on the server)
-const createEntries = () => {
-  const now = new Date();
-  const entries = exampleUrls
-    .sort(() => Math.random() - 0.5)
-    .slice(0, 25)
-    .map(url => {
-      const minutesAgo = Math.floor(Math.random() * 60);
-      const date = new Date(now.getTime() - minutesAgo * 60000);
-      return { url, date };
-    });
+const STORAGE_KEY = 'robots_analyzer_history';
+const MAX_HISTORY_ITEMS = 25;
+const MAX_AGE_MINUTES = 60;
 
-  // Sort by date, most recent first
-  return entries.sort((a, b) => b.date.getTime() - a.date.getTime());
+interface HistoryEntry {
+  url: string;
+  date: string; // ISO string for storage
+}
+
+// Create a new set of random entries
+const createNewEntries = (count: number): HistoryEntry[] => {
+  const now = new Date();
+  return exampleUrls
+    .sort(() => Math.random() - 0.5)
+    .slice(0, count)
+    .map(url => {
+      const minutesAgo = Math.floor(Math.random() * MAX_AGE_MINUTES);
+      const date = new Date(now.getTime() - minutesAgo * 60000);
+      return { url, date: date.toISOString() };
+    })
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 };
 
-const selectedEntries = createEntries();
+// Add a new entry and maintain history size
+const addNewEntry = (entries: HistoryEntry[]): HistoryEntry[] => {
+  const randomUrl = exampleUrls[Math.floor(Math.random() * exampleUrls.length)];
+  const newEntry: HistoryEntry = {
+    url: randomUrl,
+    date: new Date().toISOString()
+  };
+  
+  return [newEntry, ...entries.slice(0, MAX_HISTORY_ITEMS - 1)];
+};
 
 export default component$(() => {
-  const formatDate = (date: Date) => {
+  const entries = useSignal<HistoryEntry[]>([]);
+
+  useOnDocument(
+    'DOMContentLoaded',
+    $(() => {
+      const storedHistory = sessionStorage.getItem(STORAGE_KEY);
+      if (storedHistory) {
+        let currentEntries = JSON.parse(storedHistory);
+        const latestDate = new Date(currentEntries[0]?.date || 0);
+        const minutesSinceLatest = (Date.now() - latestDate.getTime()) / 60000;
+        
+        if (minutesSinceLatest > 5) {
+          currentEntries = addNewEntry(currentEntries);
+          sessionStorage.setItem(STORAGE_KEY, JSON.stringify(currentEntries));
+        }
+        entries.value = currentEntries;
+      } else {
+        const newEntries = createNewEntries(MAX_HISTORY_ITEMS);
+        sessionStorage.setItem(STORAGE_KEY, JSON.stringify(newEntries));
+        entries.value = newEntries;
+      }
+    })
+  );
+
+  const formatDate = (dateStr: string) => {
+    const date = new Date(dateStr);
     return date.toLocaleString('en-US', { 
       month: 'short', 
       day: 'numeric', 
@@ -92,8 +133,8 @@ export default component$(() => {
       <div class="rounded-2xl border border-gray-200">
         <div class="max-h-[600px] overflow-y-auto overscroll-contain scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
           <div class="divide-y divide-gray-200">
-            {selectedEntries.map((entry) => (
-              <div key={entry.url} class="flex items-center justify-between p-4 hover:bg-gray-50">
+            {entries.value.map((entry: HistoryEntry) => (
+              <div key={entry.url + entry.date} class="flex items-center justify-between p-4 hover:bg-gray-50">
                 <div class="min-w-0 flex-1">
                   <div class="flex items-center">
                     <span class="text-base text-gray-900">
