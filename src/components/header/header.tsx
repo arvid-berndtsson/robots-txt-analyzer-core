@@ -17,9 +17,6 @@ export default component$(() => {
             <Link href="/analyzer" class="text-sm font-medium text-gray-700 hover:text-black transition-colors">
               Analyzer
             </Link>
-            <Link href="/compare" class="text-sm font-medium text-gray-700 hover:text-black transition-colors">
-              Compare
-            </Link>
             <Link href="/history" class="text-sm font-medium text-gray-700 hover:text-black transition-colors">
               History
             </Link>
