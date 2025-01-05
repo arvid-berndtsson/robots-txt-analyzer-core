@@ -1,25 +1,108 @@
 import { component$ } from '@builder.io/qwik';
+import type { DocumentHead } from "@builder.io/qwik-city";
 
 export default component$(() => {
   return (
-    <div class="container mx-auto p-4">
-      <h1 class="text-2xl font-bold mb-4">About Robots.txt Analyzer</h1>
-      <p class="mb-4">
-        Robots.txt Analyzer is a tool designed to help webmasters and SEO professionals understand and analyze robots.txt files. These files are crucial for controlling how search engines and other web robots interact with your website.
-      </p>
-      <h2 class="text-xl font-semibold mb-2">What is a robots.txt file?</h2>
-      <p class="mb-4">
-        A robots.txt file is a simple text file placed on a website that provides instructions to web robots (also known as web crawlers or spiders) about which parts of the site should not be processed or scanned.
-      </p>
-      <h2 class="text-xl font-semibold mb-2">How to use this tool</h2>
-      <ol class="list-decimal list-inside mb-4">
-        <li>Enter the URL of the website you want to analyze in the input field on the Analyzer page.</li>
-        <li>Click the "Analyze" button to fetch and parse the robots.txt file.</li>
-        <li>Review the analysis results to understand the rules and directives in the robots.txt file.</li>
-      </ol>
-      <p>
-        For more information about robots.txt files, visit the <a href="https://www.robotstxt.org/" class="text-blue-500 hover:underline">official robots.txt website</a>.
-      </p>
+    <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-4xl">
+      <div class="space-y-16 py-8">
+        {/* Hero Section */}
+        <div class="text-center">
+          <h1 class="text-3xl sm:text-4xl font-semibold tracking-tight text-gray-900 mb-4">
+            About Robots.txt Analyzer
+          </h1>
+          <p class="text-lg text-gray-600 max-w-2xl mx-auto">
+            A simple, free tool to help you understand and analyze your website's robots.txt file.
+          </p>
+        </div>
+
+        {/* Main Content */}
+        <div class="prose prose-gray max-w-none">
+          <h2 class="text-2xl font-semibold mb-4">What We Do</h2>
+          <p class="text-gray-600 mb-8">
+            We provide a straightforward way to check and validate your robots.txt file. Our tool helps you understand how search engines interact with your website through your robots.txt configuration.
+          </p>
+
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-12">
+            <div class="rounded-2xl border border-gray-200 p-6">
+              <h3 class="text-lg font-semibold mb-3">Simple</h3>
+              <p class="text-gray-600">
+                Just enter your website URL and we'll fetch and analyze your robots.txt file.
+              </p>
+            </div>
+            <div class="rounded-2xl border border-gray-200 p-6">
+              <h3 class="text-lg font-semibold mb-3">Free</h3>
+              <p class="text-gray-600">
+                Our tool is free to use with no registration required.
+              </p>
+            </div>
+            <div class="rounded-2xl border border-gray-200 p-6">
+              <h3 class="text-lg font-semibold mb-3">Helpful</h3>
+              <p class="text-gray-600">
+                Get clear insights about your robots.txt configuration.
+              </p>
+            </div>
+          </div>
+
+          <h2 class="text-2xl font-semibold mb-4">How It Works</h2>
+          <ol class="list-decimal pl-6 mb-12 text-gray-600 space-y-2">
+            <li>Enter your website's URL</li>
+            <li>We fetch your robots.txt file</li>
+            <li>Our tool analyzes the contents</li>
+            <li>View the results and recommendations</li>
+          </ol>
+
+          <div class="rounded-2xl border border-gray-200 p-6 mb-12">
+            <h2 class="text-2xl font-semibold mb-4">Want to Learn More?</h2>
+            <p class="text-gray-600 mb-4">
+              If you're interested in learning more about robots.txt files and how they affect your website, check out our documentation:
+            </p>
+            <div class="flex gap-4">
+              <a
+                href="/learn"
+                class="inline-flex items-center rounded-full bg-white px-8 py-3 text-base font-semibold text-black shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50"
+              >
+                Read Documentation
+              </a>
+              <a
+                href="/analyzer"
+                class="inline-flex items-center rounded-full bg-black px-8 py-3 text-base font-semibold text-white shadow-sm hover:bg-gray-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+              >
+                Try the Analyzer
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 });
+
+export const head: DocumentHead = {
+  title: "About Robots.txt Analyzer - A Free Analysis Tool",
+  meta: [
+    {
+      name: "description",
+      content: "Learn about our free robots.txt analyzer tool that helps you understand and validate your website's robots.txt configuration.",
+    },
+    {
+      name: "keywords",
+      content: "robots.txt analyzer, free tool, website analysis, robots.txt validator",
+    },
+    {
+      property: "og:title",
+      content: "About Robots.txt Analyzer - A Free Analysis Tool",
+    },
+    {
+      property: "og:description",
+      content: "Learn about our free robots.txt analyzer tool that helps you understand and validate your website's robots.txt configuration.",
+    },
+    {
+      name: "twitter:title",
+      content: "About Robots.txt Analyzer - A Free Analysis Tool",
+    },
+    {
+      name: "twitter:description",
+      content: "Learn about our free robots.txt analyzer tool that helps you understand and validate your website's robots.txt configuration.",
+    },
+  ],
+};
