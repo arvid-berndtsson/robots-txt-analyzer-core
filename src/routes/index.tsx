@@ -12,11 +12,12 @@ export default component$(() => {
 });
 
 export const head: DocumentHead = {
-  title: "Welcome to Qwik",
+  title: "Robots.txt Analyzer",
   meta: [
     {
       name: "description",
-      content: "Qwik site description",
+      content: "Analyze and understand robots.txt files with our free tool.",
     },
   ],
 };
+
