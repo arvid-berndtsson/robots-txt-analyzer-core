@@ -10,7 +10,7 @@ import { DocumentHead } from "@builder.io/qwik-city";
 
 interface Recommendation {
   message: string;
-  severity: 'error' | 'warning' | 'info';
+  severity: 'error' | 'warning' | 'info' | 'potential';
   details?: string;
 }
 
@@ -171,7 +171,17 @@ export default component$(() => {
       {result.value && (
         <div class="mt-6 sm:mt-8 space-y-4 sm:space-y-6">
           <div class="flex items-center justify-between">
-            <h2 class="text-xl sm:text-2xl font-semibold text-gray-900">Analysis Results</h2>
+            <div>
+              <h2 class="text-xl sm:text-2xl font-semibold text-gray-900">Analysis Results</h2>
+              <a 
+                href={result.value.robotsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                class="text-sm text-gray-600 hover:text-black hover:underline"
+              >
+                View robots.txt
+              </a>
+            </div>
             <div class="flex items-center gap-4">
               <div class="flex items-center gap-2">
                 <span class="text-lg">{result.value.summary.status}</span>
@@ -300,17 +310,48 @@ export default component$(() => {
                   <h3 class="text-base font-semibold text-gray-900">🗺️ Sitemaps</h3>
                 </div>
                 <div class="px-4 py-3">
-                  <ul class="space-y-1 text-sm text-gray-600">
-                    {result.value.sitemaps.urls.map((sitemap, index) => (
-                      <li key={index} class="break-all">
-                        <a href={sitemap} 
-                           target="_blank" 
-                           rel="noopener noreferrer" 
-                           class="text-black hover:underline">
-                          • {sitemap}
-                        </a>
-                      </li>
-                    ))}
+                  <ul class="space-y-2 text-sm text-gray-600">
+                    {result.value.sitemaps.urls.map((sitemap, index) => {
+                      const isXml = sitemap.toLowerCase().endsWith('.xml');
+                      const isAbsolute = sitemap.startsWith('http');
+                      const sitemapUrl = isAbsolute ? sitemap : new URL(sitemap, result.value.url).toString();
+                      
+                      return (
+                        <li key={index} class="flex items-start gap-2">
+                          <span class="mt-0.5">•</span>
+                          <div class="flex-1">
+                            <a 
+                              href={sitemapUrl}
+                              target="_blank" 
+                              rel="noopener noreferrer" 
+                              class="text-black hover:underline break-all"
+                            >
+                              {sitemap}
+                            </a>
+                            <div class="mt-1 flex flex-wrap gap-2">
+                              {!isXml && (
+                                <span class="inline-flex items-center rounded-full bg-yellow-50 px-2 py-1 text-xs font-medium text-yellow-800 ring-1 ring-inset ring-yellow-600/20">
+                                  Not XML format
+                                </span>
+                              )}
+                              {!isAbsolute && (
+                                <span class="inline-flex items-center rounded-full bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10">
+                                  Relative URL
+                                </span>
+                              )}
+                              <a
+                                href={`https://validator.w3.org/feed/check.cgi?url=${encodeURIComponent(sitemapUrl)}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                class="inline-flex items-center rounded-full bg-gray-50 px-2 py-1 text-xs font-medium text-gray-600 ring-1 ring-inset ring-gray-500/10 hover:bg-gray-100"
+                              >
+                                Validate
+                              </a>
+                            </div>
+                          </div>
+                        </li>
+                      );
+                    })}
                   </ul>
                   {result.value.sitemaps.issues.length > 0 && (
                     <div class="mt-3 pt-3 border-t border-gray-200">
@@ -341,7 +382,9 @@ export default component$(() => {
                     {result.value.recommendations.map((rec, index) => (
                       <li key={index} class="flex gap-2">
                         <span class="flex-shrink-0">
-                          {rec.severity === 'error' ? '❌' : rec.severity === 'warning' ? '⚠️' : 'ℹ️'}
+                          {rec.severity === 'error' ? '❌' : 
+                           rec.severity === 'warning' ? '⚠️' : 
+                           rec.severity === 'potential' ? '❓' : 'ℹ️'}
                         </span>
                         <div>
                           <p class="font-medium text-gray-900">{rec.message}</p>
@@ -357,13 +400,14 @@ export default component$(() => {
             </div>
 
             {/* Raw Content Toggle */}
-            <details class="rounded-2xl bg-white border border-gray-200 overflow-hidden">
-              <summary class="cursor-pointer border-b border-gray-200 bg-gray-50 px-4 py-3">
+            <details class="rounded-2xl bg-white border border-gray-200 overflow-hidden group">
+              <summary class="cursor-pointer border-b border-gray-200 bg-gray-50 px-4 py-3 flex items-center justify-between [&::-webkit-details-marker]:hidden">
                 <h3 class="text-base font-semibold text-gray-900">📄 Raw robots.txt Content</h3>
+                <span class="text-gray-500 transition-transform group-open:rotate-180">▼</span>
               </summary>
               <div class="px-4 py-3">
                 <pre class="whitespace-pre-wrap text-sm text-gray-700 font-mono">
-                  {result.value.raw_content}
+                  {result.value?.raw_content}
                 </pre>
               </div>
             </details>

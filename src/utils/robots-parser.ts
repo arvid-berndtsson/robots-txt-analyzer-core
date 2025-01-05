@@ -8,7 +8,7 @@ interface RobotRule {
 
 interface Recommendation {
   message: string;
-  severity: 'error' | 'warning' | 'info';
+  severity: 'error' | 'warning' | 'info' | 'potential';
   details?: string;
 }
 
@@ -18,7 +18,7 @@ interface RobotsAnalysis {
     hasGlobalRule: boolean;
     totalSitemaps: number;
     score: number;
-    status: '✅ All Good' | '⚠️ Some Issues' | '❌ Major Issues';
+    status: '✅ All Good' | '⚠️ Some Issues' | '❌ Major Issues' | '❓ Potential Issues';
   };
   rules: Array<{
     userAgent: string;
@@ -52,7 +52,7 @@ function makeUrlAbsolute(path: string, baseUrl: string): string {
 
 export function parseRobotsTxt(content: string): RobotRule[] {
   const lines = content.split('\n').map(line => line.trim());
-  const rules: RobotRule[] = [];
+  const ruleMap = new Map<string, RobotRule>();
   let currentRule: RobotRule | null = null;
 
   for (const line of lines) {
@@ -66,8 +66,14 @@ export function parseRobotsTxt(content: string): RobotRule[] {
 
     switch (directive) {
       case 'user-agent':
-        if (currentRule) rules.push(currentRule);
-        currentRule = { userAgent: value.toLowerCase(), disallow: [], allow: [], sitemaps: [] };
+        const userAgent = value.toLowerCase();
+        // If we already have a rule for this user agent, use it
+        if (ruleMap.has(userAgent)) {
+          currentRule = ruleMap.get(userAgent)!;
+        } else {
+          currentRule = { userAgent, disallow: [], allow: [], sitemaps: [] };
+          ruleMap.set(userAgent, currentRule);
+        }
         break;
       case 'disallow':
         if (currentRule) currentRule.disallow.push(value.toLowerCase());
@@ -79,14 +85,26 @@ export function parseRobotsTxt(content: string): RobotRule[] {
         if (currentRule) currentRule.crawlDelay = parseFloat(value);
         break;
       case 'sitemap':
-        if (currentRule) currentRule.sitemaps.push(value);
-        else if (rules.length > 0) rules[rules.length - 1].sitemaps.push(value);
-        else rules.push({ userAgent: '*', disallow: [], allow: [], sitemaps: [value] });
+        if (currentRule) {
+          currentRule.sitemaps.push(value);
+        } else {
+          // If no current rule, add sitemap to global rule or create one
+          const globalRule = ruleMap.get('*') || { userAgent: '*', disallow: [], allow: [], sitemaps: [] };
+          globalRule.sitemaps.push(value);
+          ruleMap.set('*', globalRule);
+        }
         break;
     }
   }
 
-  if (currentRule) rules.push(currentRule);
+  // Convert map to array, putting global rule first if it exists
+  const rules = Array.from(ruleMap.values());
+  const globalRuleIndex = rules.findIndex(rule => rule.userAgent === '*');
+  if (globalRuleIndex !== -1) {
+    const globalRule = rules.splice(globalRuleIndex, 1)[0];
+    rules.unshift(globalRule);
+  }
+
   return rules;
 }
 
@@ -377,16 +395,37 @@ export function analyzeRobotsTxt(rules: RobotRule[], baseUrl?: string): RobotsAn
   if (hasComplexWildcards) {
     recommendations.push({
       message: "Complex wildcard patterns detected",
-      severity: "warning",
-      details: "Your robots.txt uses complex wildcard patterns. Verify these patterns aren't accidentally blocking important content."
+      severity: "potential",
+      details: "Your robots.txt uses complex wildcard patterns. This might be intentional, but verify these patterns aren't accidentally blocking important content."
     });
-    score -= 5;
+    score -= 3; // Lower score impact for potential issues
   }
 
-  // Determine overall status
-  const status = score >= 90 ? '✅ All Good' : 
-                score >= 70 ? '⚠️ Some Issues' : 
-                '❌ Major Issues';
+  // Update Shopify recommendations to use 'potential' severity
+  if (detected.some(f => f.name === 'Shopify')) {
+    const shopifyPaths = ['/admin', '/cart', '/checkout', '/orders'];
+    const unprotectedShopifyPaths = shopifyPaths.filter(path => 
+      !rules.some(rule => rule.disallow.some(disallow => disallow.includes(path.toLowerCase())))
+    );
+    if (unprotectedShopifyPaths.length > 0) {
+      recommendations.push({
+        message: "Shopify paths not explicitly blocked",
+        severity: "potential",
+        details: `These Shopify paths are not blocked: ${unprotectedShopifyPaths.join(', ')}. While they might be protected by Shopify itself, consider blocking them in robots.txt for extra clarity.`
+      });
+      score -= 3;
+    }
+  }
+
+  // Determine overall status with new potential category
+  const hasErrors = recommendations.some(r => r.severity === 'error');
+  const hasWarnings = recommendations.some(r => r.severity === 'warning');
+  const hasPotentialIssues = recommendations.some(r => r.severity === 'potential');
+  
+  const status = hasErrors ? '❌ Major Issues' : 
+                hasWarnings ? '⚠️ Some Issues' : 
+                hasPotentialIssues ? '❓ Potential Issues' :
+                '✅ All Good';
 
   // Create export data
   const jsonData = JSON.stringify({
@@ -398,7 +437,7 @@ export function analyzeRobotsTxt(rules: RobotRule[], baseUrl?: string): RobotsAn
         hasGlobalRule: !!globalRule,
         totalSitemaps: allSitemaps.size,
         score: Math.max(0, score),
-        status: score >= 90 ? '✅ All Good' : score >= 70 ? '⚠️ Some Issues' : '❌ Major Issues'
+        status: status
       },
       rules: rules.map(rule => ({
         userAgent: rule.userAgent,
