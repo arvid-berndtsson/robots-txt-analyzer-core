@@ -8,6 +8,12 @@ import {
 import { useNavigate, useLocation, server$ } from "@builder.io/qwik-city";
 import { DocumentHead } from "@builder.io/qwik-city";
 
+interface Recommendation {
+  message: string;
+  severity: 'error' | 'warning' | 'info';
+  details?: string;
+}
+
 interface RobotsAnalysisResult {
   url: string;
   robotsUrl: string;
@@ -23,10 +29,23 @@ interface RobotsAnalysisResult {
     totalRules: number;
     hasGlobalRule: boolean;
     totalSitemaps: number;
+    score: number;
+    status: '✅ All Good' | '⚠️ Some Issues' | '❌ Major Issues';
   };
-  sitemaps: string[];
-  recommendations: string[];
+  sitemaps: {
+    urls: string[];
+    issues: string[];
+  };
+  recommendations: Recommendation[];
+  urls: {
+    allowed: string[];
+    blocked: string[];
+  };
   raw_content: string;
+  export: {
+    jsonData: string;
+    csvData: string;
+  };
 }
 
 const analyzeRobotsTxt = server$(async function (inputUrl: string) {
@@ -151,7 +170,49 @@ export default component$(() => {
 
       {result.value && (
         <div class="mt-6 sm:mt-8 space-y-4 sm:space-y-6">
-          <h2 class="text-xl sm:text-2xl font-semibold text-gray-900">Analysis Results</h2>
+          <div class="flex items-center justify-between">
+            <h2 class="text-xl sm:text-2xl font-semibold text-gray-900">Analysis Results</h2>
+            <div class="flex items-center gap-4">
+              <div class="flex items-center gap-2">
+                <span class="text-lg">{result.value.summary.status}</span>
+                <span class="text-sm text-gray-600">Score: {result.value.summary.score}/100</span>
+              </div>
+              <div class="flex gap-2">
+                <button
+                  onClick$={() => {
+                    const blob = new Blob([result.value?.export.jsonData || ''], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `robots-analysis-${new Date().toISOString()}.json`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                  }}
+                  class="px-3 py-1 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                >
+                  Export JSON
+                </button>
+                <button
+                  onClick$={() => {
+                    const blob = new Blob([result.value?.export.csvData || ''], { type: 'text/csv' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `robots-analysis-${new Date().toISOString()}.csv`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                  }}
+                  class="px-3 py-1 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                >
+                  Export CSV
+                </button>
+              </div>
+            </div>
+          </div>
           
           <div class="grid grid-cols-1 gap-6">
             {/* Summary Card */}
@@ -167,7 +228,7 @@ export default component$(() => {
                   </div>
                   <div>
                     <dt class="inline font-medium">Global Rule:</dt>
-                    <dd class="inline ml-1">{result.value.summary.hasGlobalRule ? 'Present' : 'Not Present'}</dd>
+                    <dd class="inline ml-1">{result.value.summary.hasGlobalRule ? '✅ Present' : '❌ Missing'}</dd>
                   </div>
                   <div>
                     <dt class="inline font-medium">Total Sitemaps:</dt>
@@ -186,14 +247,21 @@ export default component$(() => {
                 {result.value.rules.map((rule, index) => (
                   <div key={index} class="px-4 py-3">
                     <h4 class="font-medium text-sm mb-2">
-                      {rule.isGlobal ? 'Global Rule' : rule.userAgent}
+                      {rule.isGlobal ? '🌐 Global Rule' : `🤖 ${rule.userAgent}`}
                     </h4>
                     {rule.disallowedPaths.length > 0 && (
                       <div class="mb-2">
                         <p class="text-sm font-medium text-gray-700">Disallowed Paths:</p>
                         <ul class="mt-1 space-y-1 text-sm text-gray-600">
                           {rule.disallowedPaths.map((path, i) => (
-                            <li key={i} class="ml-4">• {path}</li>
+                            <li key={i} class="ml-4">
+                              <a href={new URL(path, result.value.url).toString()} 
+                                 target="_blank" 
+                                 rel="noopener noreferrer" 
+                                 class="hover:underline">
+                                • {path}
+                              </a>
+                            </li>
                           ))}
                         </ul>
                       </div>
@@ -203,14 +271,21 @@ export default component$(() => {
                         <p class="text-sm font-medium text-gray-700">Allowed Paths:</p>
                         <ul class="mt-1 space-y-1 text-sm text-gray-600">
                           {rule.allowedPaths.map((path, i) => (
-                            <li key={i} class="ml-4">• {path}</li>
+                            <li key={i} class="ml-4">
+                              <a href={new URL(path, result.value.url).toString()} 
+                                 target="_blank" 
+                                 rel="noopener noreferrer" 
+                                 class="hover:underline">
+                                • {path}
+                              </a>
+                            </li>
                           ))}
                         </ul>
                       </div>
                     )}
                     {rule.crawlDelay && (
                       <p class="text-sm text-gray-600">
-                        <span class="font-medium">Crawl Delay:</span> {rule.crawlDelay} seconds
+                        <span class="font-medium">⏱️ Crawl Delay:</span> {rule.crawlDelay} seconds
                       </p>
                     )}
                   </div>
@@ -219,21 +294,34 @@ export default component$(() => {
             </div>
 
             {/* Sitemaps Card */}
-            {result.value.sitemaps.length > 0 && (
+            {result.value.sitemaps.urls.length > 0 && (
               <div class="rounded-2xl bg-white border border-gray-200 overflow-hidden">
                 <div class="border-b border-gray-200 bg-gray-50 px-4 py-3">
-                  <h3 class="text-base font-semibold text-gray-900">Sitemaps</h3>
+                  <h3 class="text-base font-semibold text-gray-900">🗺️ Sitemaps</h3>
                 </div>
                 <div class="px-4 py-3">
                   <ul class="space-y-1 text-sm text-gray-600">
-                    {result.value.sitemaps.map((sitemap, index) => (
+                    {result.value.sitemaps.urls.map((sitemap, index) => (
                       <li key={index} class="break-all">
-                        <a href={sitemap} target="_blank" rel="noopener noreferrer" class="text-black hover:underline">
-                          {sitemap}
+                        <a href={sitemap} 
+                           target="_blank" 
+                           rel="noopener noreferrer" 
+                           class="text-black hover:underline">
+                          • {sitemap}
                         </a>
                       </li>
                     ))}
                   </ul>
+                  {result.value.sitemaps.issues.length > 0 && (
+                    <div class="mt-3 pt-3 border-t border-gray-200">
+                      <p class="text-sm font-medium text-red-600">Issues Found:</p>
+                      <ul class="mt-1 space-y-1 text-sm text-red-600">
+                        {result.value.sitemaps.issues.map((issue, index) => (
+                          <li key={index}>• {issue}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -241,24 +329,37 @@ export default component$(() => {
             {/* Recommendations Card */}
             <div class="rounded-2xl bg-white border border-gray-200 overflow-hidden">
               <div class="border-b border-gray-200 bg-gray-50 px-4 py-3">
-                <h3 class="text-base font-semibold text-gray-900">Recommendations</h3>
+                <h3 class="text-base font-semibold text-gray-900">
+                  {result.value.recommendations.length === 0 ? '✅ No Issues Found' : '📋 Recommendations'}
+                </h3>
               </div>
               <div class="px-4 py-3">
-                <ul class="space-y-2 text-sm text-gray-700">
-                  {result.value.recommendations.map((recommendation, index) => (
-                    <li key={index} class="flex gap-2">
-                      <span class="text-black">•</span>
-                      <span>{recommendation}</span>
-                    </li>
-                  ))}
-                </ul>
+                {result.value.recommendations.length === 0 ? (
+                  <p class="text-sm text-gray-600">Great job! Your robots.txt follows best practices.</p>
+                ) : (
+                  <ul class="space-y-3 text-sm">
+                    {result.value.recommendations.map((rec, index) => (
+                      <li key={index} class="flex gap-2">
+                        <span class="flex-shrink-0">
+                          {rec.severity === 'error' ? '❌' : rec.severity === 'warning' ? '⚠️' : 'ℹ️'}
+                        </span>
+                        <div>
+                          <p class="font-medium text-gray-900">{rec.message}</p>
+                          {rec.details && (
+                            <p class="mt-1 text-gray-600">{rec.details}</p>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             </div>
 
             {/* Raw Content Toggle */}
             <details class="rounded-2xl bg-white border border-gray-200 overflow-hidden">
               <summary class="cursor-pointer border-b border-gray-200 bg-gray-50 px-4 py-3">
-                <h3 class="text-base font-semibold text-gray-900">Raw robots.txt Content</h3>
+                <h3 class="text-base font-semibold text-gray-900">📄 Raw robots.txt Content</h3>
               </summary>
               <div class="px-4 py-3">
                 <pre class="whitespace-pre-wrap text-sm text-gray-700 font-mono">
