@@ -86,7 +86,7 @@ export default component$(() => {
                   <td class="px-6 py-4 text-sm text-gray-600">✓</td>
                 </tr>
                 <tr>
-                  <td class="px-6 py-4 text-sm text-gray-900">Open Source</td>
+                  <td class="px-6 py-4 text-sm text-gray-900"><a href="https://github.com/arvid-berndtsson/robots-txt-analyzer" class="text-black hover:underline" target="_blank" rel="noopener noreferrer">Open Source</a></td>
                   <td class="px-6 py-4 text-sm text-gray-600">✓</td>
                   <td class="px-6 py-4 text-sm text-gray-600">×</td>
                 </tr>
