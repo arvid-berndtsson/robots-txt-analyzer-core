@@ -129,11 +129,6 @@ export default component$(() => {
             Get Started
           </a>
         </div>
-
-        {/* Creator Attribution */}
-        <div class="text-sm text-gray-600 pb-8">
-          Built with ♥️ by <a href="https://arvid.tech/" class="text-black hover:underline" target="_blank" rel="noopener noreferrer">Arvid Berndtsson</a>
-        </div>
       </div>
     </div>
   );
