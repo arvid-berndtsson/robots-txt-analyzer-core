@@ -5712,4 +5712,6 @@ export const exampleUrls = [
   "wgntv.com",
   "hsbc.com.my",
   "echinacities.com",
+  "arvid.tech",
+  "robots-txt.arvid.tech",
 ] as const;
