@@ -43,16 +43,16 @@ export const onPost: RequestHandler = async ({ json, parseBody, env, request }) 
     const parsedRules = parseRobotsTxt(content);
     const analysis = analyzeRobotsTxt(parsedRules);
 
-    // TODO: Implement saving results functionality
-    // if (env.HISTORY_KV) {
-    //   await env.HISTORY_KV.put(`analysis:${normalizedUrl}`, JSON.stringify({
-    //     url: normalizedUrl,
-    //     timestamp: Date.now(),
-    //     analysis
-    //   }));
-    // }
-
-    json(200, { analysis });
+    json(200, { 
+      url: normalizedUrl,
+      robotsUrl,
+      timestamp: new Date().toISOString(),
+      rules: analysis.rules,
+      summary: analysis.summary,
+      sitemaps: analysis.sitemaps,
+      recommendations: analysis.recommendations,
+      raw_content: content
+    });
   } catch (error) {
     console.error('Error:', error);
     throw json(500, { error: 'Failed to analyze robots.txt' });

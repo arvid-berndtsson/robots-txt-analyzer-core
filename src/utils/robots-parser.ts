@@ -6,6 +6,23 @@ interface RobotRule {
   sitemaps: string[];
 }
 
+interface RobotsAnalysis {
+  summary: {
+    totalRules: number;
+    hasGlobalRule: boolean;
+    totalSitemaps: number;
+  };
+  rules: Array<{
+    userAgent: string;
+    isGlobal: boolean;
+    disallowedPaths: string[];
+    allowedPaths: string[];
+    crawlDelay?: number;
+  }>;
+  sitemaps: string[];
+  recommendations: string[];
+}
+
 export function parseRobotsTxt(content: string): RobotRule[] {
   const lines = content.split('\n').map(line => line.trim());
   const rules: RobotRule[] = [];
@@ -14,18 +31,22 @@ export function parseRobotsTxt(content: string): RobotRule[] {
   for (const line of lines) {
     if (!line || line.startsWith('#')) continue;
 
-    const [directive, value] = line.split(':', 2).map(s => s.trim().toLowerCase());
+    const colonIndex = line.indexOf(':');
+    if (colonIndex === -1) continue;
+    
+    const directive = line.slice(0, colonIndex).trim().toLowerCase();
+    const value = line.slice(colonIndex + 1).trim();
 
     switch (directive) {
       case 'user-agent':
         if (currentRule) rules.push(currentRule);
-        currentRule = { userAgent: value, disallow: [], allow: [], sitemaps: [] };
+        currentRule = { userAgent: value.toLowerCase(), disallow: [], allow: [], sitemaps: [] };
         break;
       case 'disallow':
-        if (currentRule) currentRule.disallow.push(value);
+        if (currentRule) currentRule.disallow.push(value.toLowerCase());
         break;
       case 'allow':
-        if (currentRule) currentRule.allow.push(value);
+        if (currentRule) currentRule.allow.push(value.toLowerCase());
         break;
       case 'crawl-delay':
         if (currentRule) currentRule.crawlDelay = parseFloat(value);
@@ -42,49 +63,51 @@ export function parseRobotsTxt(content: string): RobotRule[] {
   return rules;
 }
 
-export function analyzeRobotsTxt(rules: RobotRule[]): string {
-  let analysis = '';
+export function analyzeRobotsTxt(rules: RobotRule[]): RobotsAnalysis {
   const globalRule = rules.find(rule => rule.userAgent === '*');
+  const allSitemaps = new Set<string>();
 
-  analysis += "Summary:\n";
-  analysis += `- Total rules: ${rules.length}\n`;
-  analysis += `- Global rule present: ${globalRule ? 'Yes' : 'No'}\n\n`;
-
-  rules.forEach((rule, index) => {
-    analysis += `Rule ${index + 1} (${rule.userAgent}):\n`;
-    analysis += `- This rule applies to ${rule.userAgent === '*' ? 'all crawlers' : `the ${rule.userAgent} crawler`}.\n`;
-    
-    if (rule.disallow.length > 0) {
-      analysis += `- Disallowed paths:\n  ${rule.disallow.join('\n  ')}\n`;
-    } else {
-      analysis += `- No paths are explicitly disallowed.\n`;
-    }
-
-    if (rule.allow.length > 0) {
-      analysis += `- Allowed paths:\n  ${rule.allow.join('\n  ')}\n`;
-    }
-
-    if (rule.crawlDelay) {
-      analysis += `- Crawl delay: ${rule.crawlDelay} seconds\n`;
-    }
-
-    if (rule.sitemaps.length > 0) {
-      analysis += `- Sitemaps:\n  ${rule.sitemaps.join('\n  ')}\n`;
-    }
-
-    analysis += '\n';
+  // Collect all sitemaps
+  rules.forEach(rule => {
+    rule.sitemaps.forEach(sitemap => allSitemaps.add(sitemap));
   });
 
-  analysis += "Recommendations:\n";
+  const recommendations: string[] = [];
+  
+  // Generate recommendations
   if (!globalRule) {
-    analysis += "- Consider adding a global rule (User-agent: *) to provide default instructions for all crawlers.\n";
+    recommendations.push("Consider adding a global rule (User-agent: *) to provide default instructions for all crawlers.");
   }
   if (rules.every(rule => rule.disallow.length === 0)) {
-    analysis += "- Your robots.txt doesn't disallow any paths. Make sure this is intentional.\n";
+    recommendations.push("Your robots.txt doesn't disallow any paths. Make sure this is intentional.");
   }
-  if (rules.every(rule => rule.sitemaps.length === 0)) {
-    analysis += "- Consider adding a Sitemap directive to help search engines discover your content more efficiently.\n";
+  if (allSitemaps.size === 0) {
+    recommendations.push("Consider adding a Sitemap directive to help search engines discover your content more efficiently.");
+  }
+  if (rules.some(rule => rule.crawlDelay && rule.crawlDelay > 5)) {
+    recommendations.push("Some crawl delays are set quite high. This might slow down search engine indexing.");
+  }
+  if (rules.some(rule => rule.disallow.includes('/'))) {
+    recommendations.push("You're blocking all access to some crawlers. Ensure this is intentional as it prevents indexing.");
+  }
+  if (rules.some(rule => rule.disallow.some(path => path.includes('*')))) {
+    recommendations.push("You're using wildcards in disallow rules. Make sure these patterns aren't accidentally blocking important content.");
   }
 
-  return analysis;
+  return {
+    summary: {
+      totalRules: rules.length,
+      hasGlobalRule: !!globalRule,
+      totalSitemaps: allSitemaps.size
+    },
+    rules: rules.map(rule => ({
+      userAgent: rule.userAgent,
+      isGlobal: rule.userAgent === '*',
+      disallowedPaths: rule.disallow,
+      allowedPaths: rule.allow,
+      crawlDelay: rule.crawlDelay
+    })),
+    sitemaps: Array.from(allSitemaps),
+    recommendations
+  };
 }

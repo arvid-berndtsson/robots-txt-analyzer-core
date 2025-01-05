@@ -8,6 +8,27 @@ import {
 import { useNavigate, useLocation, server$ } from "@builder.io/qwik-city";
 import { DocumentHead } from "@builder.io/qwik-city";
 
+interface RobotsAnalysisResult {
+  url: string;
+  robotsUrl: string;
+  timestamp: string;
+  rules: Array<{
+    userAgent: string;
+    isGlobal: boolean;
+    disallowedPaths: string[];
+    allowedPaths: string[];
+    crawlDelay?: number;
+  }>;
+  summary: {
+    totalRules: number;
+    hasGlobalRule: boolean;
+    totalSitemaps: number;
+  };
+  sitemaps: string[];
+  recommendations: string[];
+  raw_content: string;
+}
+
 const analyzeRobotsTxt = server$(async function (inputUrl: string) {
   const origin = this.env.get("ORIGIN");
   const apiKey = this.env.get("API_KEY");
@@ -37,7 +58,7 @@ const analyzeRobotsTxt = server$(async function (inputUrl: string) {
 
 export default component$(() => {
   const url = useSignal("");
-  const result = useSignal("");
+  const result = useSignal<RobotsAnalysisResult | null>(null);
   const error = useSignal("");
   const isLoading = useSignal(false);
   const navigate = useNavigate();
@@ -46,11 +67,14 @@ export default component$(() => {
   const analyzeRobotsTxtFile = $(async (inputUrl: string) => {
     isLoading.value = true;
     error.value = "";
-    result.value = "";
+    result.value = null;
 
     try {
       const data = await analyzeRobotsTxt(inputUrl);
-      result.value = data.analysis;
+      if (data && 'error' in data) {
+        throw new Error(data.error);
+      }
+      result.value = data as RobotsAnalysisResult;
 
       // Update URL without reloading the page
       navigate(`/analyzer?url=${encodeURIComponent(inputUrl)}`, {
@@ -128,10 +152,120 @@ export default component$(() => {
       {result.value && (
         <div class="mt-6 sm:mt-8 space-y-4 sm:space-y-6">
           <h2 class="text-xl sm:text-2xl font-semibold text-gray-900">Analysis Results</h2>
-          <div class="overflow-x-auto rounded-2xl bg-gray-50 p-4 sm:p-6">
-            <pre class="whitespace-pre-wrap text-sm text-gray-700">
-              {result.value}
-            </pre>
+          
+          <div class="grid grid-cols-1 gap-6">
+            {/* Summary Card */}
+            <div class="rounded-2xl bg-white border border-gray-200 overflow-hidden">
+              <div class="border-b border-gray-200 bg-gray-50 px-4 py-3">
+                <h3 class="text-base font-semibold text-gray-900">Summary</h3>
+              </div>
+              <div class="px-4 py-3">
+                <dl class="space-y-2 text-sm text-gray-700">
+                  <div>
+                    <dt class="inline font-medium">Total Rules:</dt>
+                    <dd class="inline ml-1">{result.value.summary.totalRules}</dd>
+                  </div>
+                  <div>
+                    <dt class="inline font-medium">Global Rule:</dt>
+                    <dd class="inline ml-1">{result.value.summary.hasGlobalRule ? 'Present' : 'Not Present'}</dd>
+                  </div>
+                  <div>
+                    <dt class="inline font-medium">Total Sitemaps:</dt>
+                    <dd class="inline ml-1">{result.value.summary.totalSitemaps}</dd>
+                  </div>
+                </dl>
+              </div>
+            </div>
+
+            {/* Rules Card */}
+            <div class="rounded-2xl bg-white border border-gray-200 overflow-hidden">
+              <div class="border-b border-gray-200 bg-gray-50 px-4 py-3">
+                <h3 class="text-base font-semibold text-gray-900">Crawler Rules</h3>
+              </div>
+              <div class="divide-y divide-gray-200">
+                {result.value.rules.map((rule, index) => (
+                  <div key={index} class="px-4 py-3">
+                    <h4 class="font-medium text-sm mb-2">
+                      {rule.isGlobal ? 'Global Rule' : rule.userAgent}
+                    </h4>
+                    {rule.disallowedPaths.length > 0 && (
+                      <div class="mb-2">
+                        <p class="text-sm font-medium text-gray-700">Disallowed Paths:</p>
+                        <ul class="mt-1 space-y-1 text-sm text-gray-600">
+                          {rule.disallowedPaths.map((path, i) => (
+                            <li key={i} class="ml-4">• {path}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {rule.allowedPaths.length > 0 && (
+                      <div class="mb-2">
+                        <p class="text-sm font-medium text-gray-700">Allowed Paths:</p>
+                        <ul class="mt-1 space-y-1 text-sm text-gray-600">
+                          {rule.allowedPaths.map((path, i) => (
+                            <li key={i} class="ml-4">• {path}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {rule.crawlDelay && (
+                      <p class="text-sm text-gray-600">
+                        <span class="font-medium">Crawl Delay:</span> {rule.crawlDelay} seconds
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Sitemaps Card */}
+            {result.value.sitemaps.length > 0 && (
+              <div class="rounded-2xl bg-white border border-gray-200 overflow-hidden">
+                <div class="border-b border-gray-200 bg-gray-50 px-4 py-3">
+                  <h3 class="text-base font-semibold text-gray-900">Sitemaps</h3>
+                </div>
+                <div class="px-4 py-3">
+                  <ul class="space-y-1 text-sm text-gray-600">
+                    {result.value.sitemaps.map((sitemap, index) => (
+                      <li key={index} class="break-all">
+                        <a href={sitemap} target="_blank" rel="noopener noreferrer" class="text-black hover:underline">
+                          {sitemap}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            )}
+
+            {/* Recommendations Card */}
+            <div class="rounded-2xl bg-white border border-gray-200 overflow-hidden">
+              <div class="border-b border-gray-200 bg-gray-50 px-4 py-3">
+                <h3 class="text-base font-semibold text-gray-900">Recommendations</h3>
+              </div>
+              <div class="px-4 py-3">
+                <ul class="space-y-2 text-sm text-gray-700">
+                  {result.value.recommendations.map((recommendation, index) => (
+                    <li key={index} class="flex gap-2">
+                      <span class="text-black">•</span>
+                      <span>{recommendation}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+
+            {/* Raw Content Toggle */}
+            <details class="rounded-2xl bg-white border border-gray-200 overflow-hidden">
+              <summary class="cursor-pointer border-b border-gray-200 bg-gray-50 px-4 py-3">
+                <h3 class="text-base font-semibold text-gray-900">Raw robots.txt Content</h3>
+              </summary>
+              <div class="px-4 py-3">
+                <pre class="whitespace-pre-wrap text-sm text-gray-700 font-mono">
+                  {result.value.raw_content}
+                </pre>
+              </div>
+            </details>
           </div>
         </div>
       )}
