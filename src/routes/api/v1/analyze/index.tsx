@@ -41,7 +41,41 @@ export const onPost: RequestHandler = async ({ json, parseBody, env, request }) 
     }
     const content = await response.text();
     const parsedRules = parseRobotsTxt(content);
-    const analysis = analyzeRobotsTxt(parsedRules);
+    const analysis = analyzeRobotsTxt(parsedRules, normalizedUrl);
+
+    // Generate export data
+    const jsonData = JSON.stringify({
+      url: normalizedUrl,
+      timestamp: new Date().toISOString(),
+      analysis: {
+        summary: analysis.summary,
+        rules: analysis.rules,
+        sitemaps: analysis.sitemaps,
+        recommendations: analysis.recommendations,
+        urls: analysis.urls
+      },
+      attribution: {
+        tool: "Robots.txt Analyzer",
+        url: "https://robots-txt.arvid.tech/",
+        author: "Arvid Berndtsson"
+      }
+    }, null, 2);
+
+    const headers = ['User Agent', 'Type', 'Allowed Paths', 'Disallowed Paths', 'Crawl Delay'];
+    const rows = parsedRules.map(rule => [
+      rule.userAgent,
+      rule.userAgent === '*' ? 'Global' : 'Specific',
+      rule.allow.join('; '),
+      rule.disallow.join('; '),
+      rule.crawlDelay || ''
+    ]);
+    const csvData = [
+      ['# Analysis generated using Robots.txt Analyzer (https://robots-txt.arvid.tech/) by Arvid Berndtsson'],
+      ['# Generated at: ' + new Date().toISOString()],
+      [''],
+      headers,
+      ...rows
+    ].map(row => row.join(',')).join('\n');
 
     json(200, { 
       url: normalizedUrl,
@@ -51,7 +85,11 @@ export const onPost: RequestHandler = async ({ json, parseBody, env, request }) 
       summary: analysis.summary,
       sitemaps: analysis.sitemaps,
       recommendations: analysis.recommendations,
-      raw_content: content
+      raw_content: content,
+      export: {
+        jsonData,
+        csvData
+      }
     });
   } catch (error) {
     console.error('Error:', error);

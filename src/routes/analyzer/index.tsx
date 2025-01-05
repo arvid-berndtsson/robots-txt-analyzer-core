@@ -189,34 +189,50 @@ export default component$(() => {
               </div>
               <div class="flex gap-2">
                 <button
-                  onClick$={() => {
-                    const blob = new Blob([result.value?.export.jsonData || ''], { type: 'application/json' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `robots-analysis-${new Date().toISOString()}.json`;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    URL.revokeObjectURL(url);
-                  }}
-                  class="px-3 py-1 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                  preventdefault:click
+                  onClick$={$(() => {
+                    if (!result.value?.export?.jsonData) {
+                      console.error('Export data not available');
+                      return;
+                    }
+                    try {
+                      const blob = new Blob([result.value.export.jsonData], { type: 'application/json' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `robots-analysis-${new Date().toISOString()}.json`;
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    } catch (error) {
+                      console.error('Failed to export JSON:', error);
+                    }
+                  })}
+                  class="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 active:bg-gray-100 active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={!result.value?.export?.jsonData}
                 >
                   Export JSON
                 </button>
                 <button
-                  onClick$={() => {
-                    const blob = new Blob([result.value?.export.csvData || ''], { type: 'text/csv' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `robots-analysis-${new Date().toISOString()}.csv`;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    URL.revokeObjectURL(url);
-                  }}
-                  class="px-3 py-1 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                  preventdefault:click
+                  onClick$={$(() => {
+                    if (!result.value?.export?.csvData) {
+                      console.error('Export data not available');
+                      return;
+                    }
+                    try {
+                      const blob = new Blob([result.value.export.csvData], { type: 'text/csv' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `robots-analysis-${new Date().toISOString()}.csv`;
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    } catch (error) {
+                      console.error('Failed to export CSV:', error);
+                    }
+                  })}
+                  class="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 active:bg-gray-100 active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={!result.value?.export?.csvData}
                 >
                   Export CSV
                 </button>
@@ -314,7 +330,7 @@ export default component$(() => {
                     {result.value.sitemaps.urls.map((sitemap, index) => {
                       const isXml = sitemap.toLowerCase().endsWith('.xml');
                       const isAbsolute = sitemap.startsWith('http');
-                      const sitemapUrl = isAbsolute ? sitemap : new URL(sitemap, result.value.url).toString();
+                      const sitemapUrl = isAbsolute ? sitemap : new URL(sitemap, (result.value as RobotsAnalysisResult).url).toString();
                       
                       return (
                         <li key={index} class="flex items-start gap-2">

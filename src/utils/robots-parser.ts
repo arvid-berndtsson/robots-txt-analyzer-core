@@ -36,10 +36,6 @@ interface RobotsAnalysis {
     allowed: string[];
     blocked: string[];
   };
-  export: {
-    jsonData: string;
-    csvData: string;
-  };
 }
 
 function makeUrlAbsolute(path: string, baseUrl: string): string {
@@ -269,79 +265,81 @@ export function analyzeRobotsTxt(rules: RobotRule[], baseUrl?: string): RobotsAn
     score -= 20;
   }
 
-  // Framework-specific recommendations
-  detected.forEach(framework => {
-    switch (framework.name) {
-      case 'WordPress':
-        // Check WordPress-specific paths
-        const wpPaths = ['/wp-admin', '/wp-includes', '/wp-content/plugins', '/wp-content/themes'];
-        const unprotectedWpPaths = wpPaths.filter(path => 
-          !rules.some(rule => rule.disallow.some(disallow => disallow.includes(path.toLowerCase())))
-        );
-        if (unprotectedWpPaths.length > 0) {
-          recommendations.push({
-            message: "WordPress admin areas exposed",
-            severity: "error",
-            details: `Protect these WordPress paths: ${unprotectedWpPaths.join(', ')}. This helps prevent unauthorized access and potential security issues.`
-          });
-          score -= 15;
-        }
-        // Check for XML sitemap
-        if (!Array.from(allSitemaps).some(url => url.includes('sitemap.xml') || url.includes('sitemap_index.xml'))) {
-          recommendations.push({
-            message: "WordPress XML sitemap not declared",
-            severity: "warning",
-            details: "WordPress generates XML sitemaps by default. Add sitemap_index.xml to help search engines discover your content."
-          });
-          score -= 5;
-        }
-        break;
+  // Framework-specific recommendations and sensitive paths analysis only if web apps detected
+  if (detected.length > 0) {
+    detected.forEach(framework => {
+      switch (framework.name) {
+        case 'WordPress':
+          // Check WordPress-specific paths
+          const wpPaths = ['/wp-admin', '/wp-includes', '/wp-content/plugins', '/wp-content/themes'];
+          const unprotectedWpPaths = wpPaths.filter(path => 
+            !rules.some(rule => rule.disallow.some(disallow => disallow.includes(path.toLowerCase())))
+          );
+          if (unprotectedWpPaths.length > 0) {
+            recommendations.push({
+              message: "WordPress admin areas exposed",
+              severity: "error",
+              details: `Protect these WordPress paths: ${unprotectedWpPaths.join(', ')}. This helps prevent unauthorized access and potential security issues.`
+            });
+            score -= 15;
+          }
+          // Check for XML sitemap
+          if (!Array.from(allSitemaps).some(url => url.includes('sitemap.xml') || url.includes('sitemap_index.xml'))) {
+            recommendations.push({
+              message: "WordPress XML sitemap not declared",
+              severity: "warning",
+              details: "WordPress generates XML sitemaps by default. Add sitemap_index.xml to help search engines discover your content."
+            });
+            score -= 5;
+          }
+          break;
 
-      case 'Drupal':
-        // Check Drupal-specific paths
-        const drupalPaths = ['/admin', '/node/add', '/user/register', '/install.php'];
-        const unprotectedDrupalPaths = drupalPaths.filter(path => 
-          !rules.some(rule => rule.disallow.some(disallow => disallow.includes(path.toLowerCase())))
-        );
-        if (unprotectedDrupalPaths.length > 0) {
-          recommendations.push({
-            message: "Drupal admin areas exposed",
-            severity: "error",
-            details: `Protect these Drupal paths: ${unprotectedDrupalPaths.join(', ')}. These should be blocked from search engine indexing.`
-          });
-          score -= 15;
-        }
-        break;
+        case 'Drupal':
+          // Check Drupal-specific paths
+          const drupalPaths = ['/admin', '/node/add', '/user/register', '/install.php'];
+          const unprotectedDrupalPaths = drupalPaths.filter(path => 
+            !rules.some(rule => rule.disallow.some(disallow => disallow.includes(path.toLowerCase())))
+          );
+          if (unprotectedDrupalPaths.length > 0) {
+            recommendations.push({
+              message: "Drupal admin areas exposed",
+              severity: "error",
+              details: `Protect these Drupal paths: ${unprotectedDrupalPaths.join(', ')}. These should be blocked from search engine indexing.`
+            });
+            score -= 15;
+          }
+          break;
 
-      case 'Magento':
-        // Check Magento-specific paths
-        if (!rules.some(rule => rule.disallow.some(path => path.includes('/admin')))) {
-          recommendations.push({
-            message: "Magento admin path exposed",
-            severity: "error",
-            details: "Block access to your Magento admin area to prevent unauthorized access attempts."
-          });
-          score -= 15;
-        }
-        break;
+        case 'Magento':
+          // Check Magento-specific paths
+          if (!rules.some(rule => rule.disallow.some(path => path.includes('/admin')))) {
+            recommendations.push({
+              message: "Magento admin path exposed",
+              severity: "error",
+              details: "Block access to your Magento admin area to prevent unauthorized access attempts."
+            });
+            score -= 15;
+          }
+          break;
 
-      case 'Shopify':
-        // Check Shopify-specific recommendations
-        const shopifyPaths = ['/admin', '/cart', '/checkout', '/orders'];
-        const unprotectedShopifyPaths = shopifyPaths.filter(path => 
-          !rules.some(rule => rule.disallow.some(disallow => disallow.includes(path.toLowerCase())))
-        );
-        if (unprotectedShopifyPaths.length > 0) {
-          recommendations.push({
-            message: "Shopify checkout and admin areas exposed",
-            severity: "warning",
-            details: `Consider protecting these Shopify paths: ${unprotectedShopifyPaths.join(', ')}. While some might be protected by Shopify itself, it's good practice to block them in robots.txt.`
-          });
-          score -= 10;
-        }
-        break;
-    }
-  });
+        case 'Shopify':
+          // Check Shopify-specific recommendations
+          const shopifyPaths = ['/admin', '/cart', '/checkout', '/orders'];
+          const unprotectedShopifyPaths = shopifyPaths.filter(path => 
+            !rules.some(rule => rule.disallow.some(disallow => disallow.includes(path.toLowerCase())))
+          );
+          if (unprotectedShopifyPaths.length > 0) {
+            recommendations.push({
+              message: "Shopify checkout and admin areas exposed",
+              severity: "warning",
+              details: `Consider protecting these Shopify paths: ${unprotectedShopifyPaths.join(', ')}. While some might be protected by Shopify itself, it's good practice to block them in robots.txt.`
+            });
+            score -= 10;
+          }
+          break;
+      }
+    });
+  }
 
   // Only check for sensitive paths if we detect a web application
   if (detected.length > 0) {
@@ -427,42 +425,6 @@ export function analyzeRobotsTxt(rules: RobotRule[], baseUrl?: string): RobotsAn
                 hasPotentialIssues ? '❓ Potential Issues' :
                 '✅ All Good';
 
-  // Create export data
-  const jsonData = JSON.stringify({
-    url: baseUrl,
-    timestamp: new Date().toISOString(),
-    analysis: {
-      summary: {
-        totalRules: rules.length,
-        hasGlobalRule: !!globalRule,
-        totalSitemaps: allSitemaps.size,
-        score: Math.max(0, score),
-        status: status
-      },
-      rules: rules.map(rule => ({
-        userAgent: rule.userAgent,
-        isGlobal: rule.userAgent === '*',
-        disallowedPaths: rule.disallow,
-        allowedPaths: rule.allow,
-        crawlDelay: rule.crawlDelay
-      })),
-      sitemaps: Array.from(allSitemaps),
-      recommendations,
-      detectedWebApps: detected,
-      sensitivePathsAnalysis: unprotectedPaths
-    }
-  }, null, 2);
-
-  const headers = ['User Agent', 'Type', 'Allowed Paths', 'Disallowed Paths', 'Crawl Delay'];
-  const rows = rules.map(rule => [
-    rule.userAgent,
-    rule.userAgent === '*' ? 'Global' : 'Specific',
-    rule.allow.join('; '),
-    rule.disallow.join('; '),
-    rule.crawlDelay || ''
-  ]);
-  const csvData = [headers, ...rows].map(row => row.join(',')).join('\n');
-
   return {
     summary: {
       totalRules: rules.length,
@@ -486,10 +448,6 @@ export function analyzeRobotsTxt(rules: RobotRule[], baseUrl?: string): RobotsAn
     urls: {
       allowed: Array.from(uniqueAllowedUrls),
       blocked: Array.from(uniqueBlockedUrls)
-    },
-    export: {
-      jsonData,
-      csvData
     }
   };
 }
