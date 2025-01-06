@@ -82,4 +82,4 @@ Built by [Arvid Berndtsson](https://arvid.tech)
 
 ## License
 
-This project is open source and available under the MIT [License](LICENSE).
+This project is open source and available under the [MIT License](LICENSE).
