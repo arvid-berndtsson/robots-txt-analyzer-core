@@ -8,6 +8,46 @@ import {
 import { useNavigate, useLocation, server$ } from "@builder.io/qwik-city";
 import { DocumentHead } from "@builder.io/qwik-city";
 
+interface Recommendation {
+  message: string;
+  severity: 'error' | 'warning' | 'info' | 'potential';
+  details?: string;
+}
+
+interface RobotsAnalysisResult {
+  url: string;
+  robotsUrl: string;
+  timestamp: string;
+  rules: Array<{
+    userAgent: string;
+    isGlobal: boolean;
+    disallowedPaths: string[];
+    allowedPaths: string[];
+    crawlDelay?: number;
+  }>;
+  summary: {
+    totalRules: number;
+    hasGlobalRule: boolean;
+    totalSitemaps: number;
+    score: number;
+    status: '✅ All Good' | '⚠️ Some Issues' | '❌ Major Issues';
+  };
+  sitemaps: {
+    urls: string[];
+    issues: string[];
+  };
+  recommendations: Recommendation[];
+  urls: {
+    allowed: string[];
+    blocked: string[];
+  };
+  raw_content: string;
+  export: {
+    jsonData: string;
+    csvData: string;
+  };
+}
+
 const analyzeRobotsTxt = server$(async function (inputUrl: string) {
   const origin = this.env.get("ORIGIN");
   const apiKey = this.env.get("API_KEY");
@@ -37,7 +77,7 @@ const analyzeRobotsTxt = server$(async function (inputUrl: string) {
 
 export default component$(() => {
   const url = useSignal("");
-  const result = useSignal("");
+  const result = useSignal<RobotsAnalysisResult | null>(null);
   const error = useSignal("");
   const isLoading = useSignal(false);
   const navigate = useNavigate();
@@ -46,11 +86,14 @@ export default component$(() => {
   const analyzeRobotsTxtFile = $(async (inputUrl: string) => {
     isLoading.value = true;
     error.value = "";
-    result.value = "";
+    result.value = null;
 
     try {
       const data = await analyzeRobotsTxt(inputUrl);
-      result.value = data.analysis;
+      if (data && 'error' in data) {
+        throw new Error(data.error);
+      }
+      result.value = data as RobotsAnalysisResult;
 
       // Update URL without reloading the page
       navigate(`/analyzer?url=${encodeURIComponent(inputUrl)}`, {
@@ -127,11 +170,257 @@ export default component$(() => {
 
       {result.value && (
         <div class="mt-6 sm:mt-8 space-y-4 sm:space-y-6">
-          <h2 class="text-xl sm:text-2xl font-semibold text-gray-900">Analysis Results</h2>
-          <div class="overflow-x-auto rounded-2xl bg-gray-50 p-4 sm:p-6">
-            <pre class="whitespace-pre-wrap text-sm text-gray-700">
-              {result.value}
-            </pre>
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-xl sm:text-2xl font-semibold text-gray-900">Analysis Results</h2>
+              <a 
+                href={result.value.robotsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                class="text-sm text-gray-600 hover:text-black hover:underline"
+              >
+                View robots.txt
+              </a>
+            </div>
+            <div class="flex items-center gap-4">
+              <div class="flex items-center gap-2">
+                <span class="text-lg">{result.value.summary.status}</span>
+                <span class="text-sm text-gray-600">Score: {result.value.summary.score}/100</span>
+              </div>
+              <div class="flex gap-2">
+                <button
+                  preventdefault:click
+                  onClick$={$(() => {
+                    try {
+                      const data = result.value!;
+                      const blob = new Blob([data.export.jsonData], { type: 'application/json' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `robots-analysis-${new Date().toISOString()}.json`;
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    } catch (error) {
+                      console.error('Failed to export JSON:', error);
+                    }
+                  })}
+                  class="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 active:bg-gray-100 active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={!result.value.export.jsonData}
+                >
+                  Export JSON
+                </button>
+                <button
+                  preventdefault:click
+                  onClick$={$(() => {
+                    try {
+                      const data = result.value!;
+                      const blob = new Blob([data.export.csvData], { type: 'text/csv' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `robots-analysis-${new Date().toISOString()}.csv`;
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    } catch (error) {
+                      console.error('Failed to export CSV:', error);
+                    }
+                  })}
+                  class="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 active:bg-gray-100 active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={!result.value.export.csvData}
+                >
+                  Export CSV
+                </button>
+              </div>
+            </div>
+          </div>
+          
+          <div class="grid grid-cols-1 gap-6">
+            {/* Summary Card */}
+            <div class="rounded-2xl bg-white border border-gray-200 overflow-hidden">
+              <div class="border-b border-gray-200 bg-gray-50 px-4 py-3">
+                <h3 class="text-base font-semibold text-gray-900">Summary</h3>
+              </div>
+              <div class="px-4 py-3">
+                <dl class="space-y-2 text-sm text-gray-700">
+                  <div>
+                    <dt class="inline font-medium">Total Rules:</dt>
+                    <dd class="inline ml-1">{result.value.summary.totalRules}</dd>
+                  </div>
+                  <div>
+                    <dt class="inline font-medium">Global Rule:</dt>
+                    <dd class="inline ml-1">{result.value.summary.hasGlobalRule ? '✅ Present' : '❌ Missing'}</dd>
+                  </div>
+                  <div>
+                    <dt class="inline font-medium">Total Sitemaps:</dt>
+                    <dd class="inline ml-1">{result.value.summary.totalSitemaps}</dd>
+                  </div>
+                </dl>
+              </div>
+            </div>
+
+            {/* Rules Card */}
+            <div class="rounded-2xl bg-white border border-gray-200 overflow-hidden">
+              <div class="border-b border-gray-200 bg-gray-50 px-4 py-3">
+                <h3 class="text-base font-semibold text-gray-900">Crawler Rules</h3>
+              </div>
+              <div class="divide-y divide-gray-200">
+                {result.value.rules.map((rule, index) => (
+                  <div key={index} class="px-4 py-3">
+                    <h4 class="font-medium text-sm mb-2">
+                      {rule.isGlobal ? '🌐 Global Rule' : `🤖 ${rule.userAgent}`}
+                    </h4>
+                    {rule.disallowedPaths.length > 0 && (
+                      <div class="mb-2">
+                        <p class="text-sm font-medium text-gray-700">Disallowed Paths:</p>
+                        <ul class="mt-1 space-y-1 text-sm text-gray-600">
+                          {rule.disallowedPaths.map((path, i) => (
+                            <li key={i} class="ml-4">
+                              <a href={new URL(path, (result.value as RobotsAnalysisResult).url).toString()} 
+                                 target="_blank" 
+                                 rel="noopener noreferrer" 
+                                 class="hover:underline">
+                                • {path}
+                              </a>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {rule.allowedPaths.length > 0 && (
+                      <div class="mb-2">
+                        <p class="text-sm font-medium text-gray-700">Allowed Paths:</p>
+                        <ul class="mt-1 space-y-1 text-sm text-gray-600">
+                          {rule.allowedPaths.map((path, i) => (
+                            <li key={i} class="ml-4">
+                              <a href={new URL(path, (result.value as RobotsAnalysisResult).url).toString()} 
+                                 target="_blank" 
+                                 rel="noopener noreferrer" 
+                                 class="hover:underline">
+                                • {path}
+                              </a>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {rule.crawlDelay && (
+                      <p class="text-sm text-gray-600">
+                        <span class="font-medium">⏱️ Crawl Delay:</span> {rule.crawlDelay} seconds
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Sitemaps Card */}
+            {result.value.sitemaps.urls.length > 0 && (
+              <div class="rounded-2xl bg-white border border-gray-200 overflow-hidden">
+                <div class="border-b border-gray-200 bg-gray-50 px-4 py-3">
+                  <h3 class="text-base font-semibold text-gray-900">🗺️ Sitemaps</h3>
+                </div>
+                <div class="px-4 py-3">
+                  <ul class="space-y-2 text-sm text-gray-600">
+                    {result.value.sitemaps.urls.map((sitemap, index) => {
+                      const isXml = sitemap.toLowerCase().endsWith('.xml');
+                      const isAbsolute = sitemap.startsWith('http');
+                      const sitemapUrl = isAbsolute ? sitemap : new URL(sitemap, (result.value as RobotsAnalysisResult).url).toString();
+                      
+                      return (
+                        <li key={index} class="flex items-start gap-2">
+                          <span class="mt-0.5">•</span>
+                          <div class="flex-1">
+                            <a 
+                              href={sitemapUrl}
+                              target="_blank" 
+                              rel="noopener noreferrer" 
+                              class="text-black hover:underline break-all"
+                            >
+                              {sitemap}
+                            </a>
+                            <div class="mt-1 flex flex-wrap gap-2">
+                              {!isXml && (
+                                <span class="inline-flex items-center rounded-full bg-yellow-50 px-2 py-1 text-xs font-medium text-yellow-800 ring-1 ring-inset ring-yellow-600/20">
+                                  Not XML format
+                                </span>
+                              )}
+                              {!isAbsolute && (
+                                <span class="inline-flex items-center rounded-full bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10">
+                                  Relative URL
+                                </span>
+                              )}
+                              <a
+                                href={`https://validator.w3.org/feed/check.cgi?url=${encodeURIComponent(sitemapUrl)}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                class="inline-flex items-center rounded-full bg-gray-50 px-2 py-1 text-xs font-medium text-gray-600 ring-1 ring-inset ring-gray-500/10 hover:bg-gray-100"
+                              >
+                                Validate
+                              </a>
+                            </div>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  {result.value.sitemaps.issues.length > 0 && (
+                    <div class="mt-3 pt-3 border-t border-gray-200">
+                      <p class="text-sm font-medium text-red-600">Issues Found:</p>
+                      <ul class="mt-1 space-y-1 text-sm text-red-600">
+                        {result.value.sitemaps.issues.map((issue, index) => (
+                          <li key={index}>• {issue}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Recommendations Card */}
+            <div class="rounded-2xl bg-white border border-gray-200 overflow-hidden">
+              <div class="border-b border-gray-200 bg-gray-50 px-4 py-3">
+                <h3 class="text-base font-semibold text-gray-900">
+                  {result.value.recommendations.length === 0 ? '✅ No Issues Found' : '📋 Recommendations'}
+                </h3>
+              </div>
+              <div class="px-4 py-3">
+                {result.value.recommendations.length === 0 ? (
+                  <p class="text-sm text-gray-600">Great job! Your robots.txt follows best practices.</p>
+                ) : (
+                  <ul class="space-y-3 text-sm">
+                    {result.value.recommendations.map((rec, index) => (
+                      <li key={index} class="flex gap-2">
+                        <span class="flex-shrink-0">
+                          {rec.severity === 'error' ? '❌' : 
+                           rec.severity === 'warning' ? '⚠️' : 
+                           rec.severity === 'potential' ? '❓' : 'ℹ️'}
+                        </span>
+                        <div>
+                          <p class="font-medium text-gray-900">{rec.message}</p>
+                          {rec.details && (
+                            <p class="mt-1 text-gray-600">{rec.details}</p>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+
+            {/* Raw Content Toggle */}
+            <details class="rounded-2xl bg-white border border-gray-200 overflow-hidden group">
+              <summary class="cursor-pointer border-b border-gray-200 bg-gray-50 px-4 py-3 flex items-center justify-between [&::-webkit-details-marker]:hidden">
+                <h3 class="text-base font-semibold text-gray-900">📄 Raw robots.txt Content</h3>
+                <span class="text-gray-500 transition-transform group-open:rotate-180">▼</span>
+              </summary>
+              <div class="px-4 py-3">
+                <pre class="whitespace-pre-wrap text-sm text-gray-700 font-mono">
+                  {result.value?.raw_content}
+                </pre>
+              </div>
+            </details>
           </div>
         </div>
       )}
