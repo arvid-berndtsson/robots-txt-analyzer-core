@@ -191,12 +191,9 @@ export default component$(() => {
                 <button
                   preventdefault:click
                   onClick$={$(() => {
-                    if (!result.value?.export?.jsonData) {
-                      console.error('Export data not available');
-                      return;
-                    }
                     try {
-                      const blob = new Blob([result.value.export.jsonData], { type: 'application/json' });
+                      const data = result.value!;
+                      const blob = new Blob([data.export.jsonData], { type: 'application/json' });
                       const url = URL.createObjectURL(blob);
                       const a = document.createElement('a');
                       a.href = url;
@@ -208,19 +205,16 @@ export default component$(() => {
                     }
                   })}
                   class="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 active:bg-gray-100 active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={!result.value?.export?.jsonData}
+                  disabled={!result.value.export.jsonData}
                 >
                   Export JSON
                 </button>
                 <button
                   preventdefault:click
                   onClick$={$(() => {
-                    if (!result.value?.export?.csvData) {
-                      console.error('Export data not available');
-                      return;
-                    }
                     try {
-                      const blob = new Blob([result.value.export.csvData], { type: 'text/csv' });
+                      const data = result.value!;
+                      const blob = new Blob([data.export.csvData], { type: 'text/csv' });
                       const url = URL.createObjectURL(blob);
                       const a = document.createElement('a');
                       a.href = url;
@@ -232,7 +226,7 @@ export default component$(() => {
                     }
                   })}
                   class="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 active:bg-gray-100 active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={!result.value?.export?.csvData}
+                  disabled={!result.value.export.csvData}
                 >
                   Export CSV
                 </button>
@@ -281,7 +275,7 @@ export default component$(() => {
                         <ul class="mt-1 space-y-1 text-sm text-gray-600">
                           {rule.disallowedPaths.map((path, i) => (
                             <li key={i} class="ml-4">
-                              <a href={new URL(path, result.value.url).toString()} 
+                              <a href={new URL(path, (result.value as RobotsAnalysisResult).url).toString()} 
                                  target="_blank" 
                                  rel="noopener noreferrer" 
                                  class="hover:underline">
@@ -298,7 +292,7 @@ export default component$(() => {
                         <ul class="mt-1 space-y-1 text-sm text-gray-600">
                           {rule.allowedPaths.map((path, i) => (
                             <li key={i} class="ml-4">
-                              <a href={new URL(path, result.value.url).toString()} 
+                              <a href={new URL(path, (result.value as RobotsAnalysisResult).url).toString()} 
                                  target="_blank" 
                                  rel="noopener noreferrer" 
                                  class="hover:underline">
