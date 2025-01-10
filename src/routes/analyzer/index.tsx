@@ -49,7 +49,7 @@ interface RobotsAnalysisResult {
 }
 
 const analyzeRobotsTxt = server$(async function (inputUrl: string) {
-  const origin = this.env.get("ORIGIN");
+  const origin = this.env.get("CF_PAGES_URL") || this.env.get("ORIGIN");
   const apiKey = this.env.get("API_KEY");
 
   if (!origin) {
