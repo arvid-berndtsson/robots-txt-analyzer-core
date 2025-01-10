@@ -1,5 +1,6 @@
 import { type RequestHandler } from "@builder.io/qwik-city";
 import { parseRobotsTxt, analyzeRobotsTxt } from "../../../../utils/robots-parser";
+import { type KVNamespace, createLocalKV } from "../../../../utils/local-kv";
 
 // Normalize URL to ensure HTTPS and protocol presence
 const normalizeUrl = (url: string): string => {
@@ -20,6 +21,9 @@ const normalizeUrl = (url: string): string => {
 
 export const onPost: RequestHandler = async ({ json, parseBody, env, request }) => {
   const apiKey = env.get("API_KEY");
+  // Use local KV implementation if running locally
+  const historyKV = (typeof env.get("HISTORY_KV") === 'object' ? 
+    env.get("HISTORY_KV") : createLocalKV()) as KVNamespace;
 
   if (request.headers.get("X-API-Key") !== apiKey) {
     throw json(401, { error: "Unauthorized" });
@@ -34,6 +38,22 @@ export const onPost: RequestHandler = async ({ json, parseBody, env, request }) 
 
   try {
     const normalizedUrl = normalizeUrl(url);
+    const domain = new URL(normalizedUrl).hostname;
+    
+    // Check cache first
+    const cachedResult = await historyKV.get(`analysis:${domain}`);
+    if (cachedResult) {
+      const parsed = JSON.parse(cachedResult);
+      const cacheAge = Date.now() - new Date(parsed.timestamp).getTime();
+      
+      // If cache is less than 60 seconds old, return it
+      if (cacheAge < 60000) {
+        json(200, parsed);
+        return;
+      }
+    }
+
+    // Fetch and analyze if no cache or cache is too old
     const robotsUrl = `${new URL(normalizedUrl).origin}/robots.txt`;
     const response = await fetch(robotsUrl);
     if (!response.ok) {
@@ -77,9 +97,10 @@ export const onPost: RequestHandler = async ({ json, parseBody, env, request }) 
       ...rows
     ].map(row => row.join(',')).join('\n');
 
-    json(200, { 
+    const result = { 
       url: normalizedUrl,
       robotsUrl,
+      domain: new URL(normalizedUrl).hostname,
       timestamp: new Date().toISOString(),
       rules: analysis.rules,
       summary: analysis.summary,
@@ -90,7 +111,13 @@ export const onPost: RequestHandler = async ({ json, parseBody, env, request }) 
         jsonData,
         csvData
       }
-    });
+    };
+
+    // Cache the result
+    await historyKV.put(`analysis:${domain}`, JSON.stringify(result));
+
+    json(200, result);
+    return;
   } catch (error) {
     console.error('Error:', error);
     throw json(500, { error: 'Failed to analyze robots.txt' });
