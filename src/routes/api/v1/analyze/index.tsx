@@ -1,6 +1,12 @@
 import { type RequestHandler } from "@builder.io/qwik-city";
 import { parseRobotsTxt, analyzeRobotsTxt } from "../../../../utils/robots-parser";
-import { type KVNamespace, createLocalKV } from "../../../../utils/local-kv";
+import type { D1Database } from "../../../../types/cloudflare";
+import { createLocalDB } from "../../../../utils/local-db";
+
+interface CacheEntry {
+  result: string;
+  timestamp: string;
+}
 
 // Normalize URL to ensure HTTPS and protocol presence
 const normalizeUrl = (url: string): string => {
@@ -21,12 +27,15 @@ const normalizeUrl = (url: string): string => {
 
 export const onPost: RequestHandler = async ({ json, parseBody, env, request }) => {
   const apiKey = env.get("API_KEY");
-  // Use local KV implementation if running locally
-  const historyKV = (typeof env.get("HISTORY_KV") === 'object' ? 
-    env.get("HISTORY_KV") : createLocalKV()) as KVNamespace;
+  const db = (typeof env.get("DB") === 'object' ? 
+    env.get("DB") : createLocalDB()) as D1Database;
 
   if (request.headers.get("X-API-Key") !== apiKey) {
     throw json(401, { error: "Unauthorized" });
+  }
+
+  if (!db) {
+    throw json(500, { error: 'Database not available' });
   }
 
   const body = await parseBody();
@@ -39,16 +48,18 @@ export const onPost: RequestHandler = async ({ json, parseBody, env, request }) 
   try {
     const normalizedUrl = normalizeUrl(url);
     const domain = new URL(normalizedUrl).hostname;
-    
+
     // Check cache first
-    const cachedResult = await historyKV.get(`cache:${domain}`);
-    if (cachedResult) {
-      const parsed = JSON.parse(cachedResult);
-      const cacheAge = Date.now() - new Date(parsed.timestamp).getTime();
+    const { results: [cached] } = await db.prepare(
+      "SELECT result, timestamp FROM cache WHERE domain = ?"
+    ).bind(domain).all<CacheEntry>();
+
+    if (cached) {
+      const cacheAge = Date.now() - new Date(cached.timestamp).getTime();
       
       // If cache is less than 60 seconds old, return it
       if (cacheAge < 60000) {
-        json(200, parsed);
+        json(200, JSON.parse(cached.result));
         return;
       }
     }
@@ -113,24 +124,17 @@ export const onPost: RequestHandler = async ({ json, parseBody, env, request }) 
       }
     };
 
-    // Cache the result
-    await historyKV.put(`cache:${domain}`, JSON.stringify(result));
+    // Save to cache
+    await db.prepare(
+      "INSERT OR REPLACE INTO cache (domain, result, timestamp) VALUES (?, ?, datetime('now'))"
+    ).bind(domain, JSON.stringify(result)).run();
 
-    // Save the result to history
-    if (historyKV) {
-      const historyEntry = {
-        url: normalizedUrl,
-        domain: domain,
-        timestamp: new Date().toISOString()
-      };
-      await historyKV.put(
-        `history:${domain}:${historyEntry.timestamp}`,
-        JSON.stringify(historyEntry)
-      );
-    }
+    // Save to history
+    await db.prepare(
+      "INSERT INTO analyses (domain, url, timestamp, is_real) VALUES (?, ?, datetime('now'), 1)"
+    ).bind(domain, normalizedUrl).run();
 
     json(200, result);
-    return;
   } catch (error) {
     console.error('Error:', error);
     throw json(500, { error: 'Failed to analyze robots.txt' });

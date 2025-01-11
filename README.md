@@ -19,10 +19,17 @@ A modern web tool for analyzing robots.txt files, built with Qwik and deployed o
 - Node.js 16+
 - npm or yarn
 - A `.env.local` file with:
-  ```
+  ```shell
   ORIGIN="http://localhost:5173"
   API_KEY="your-api-key"
   HISTORY_KV="NAME_OF_CLOUDFLARE_KV_NAMESPACE"
+  ```
+- A `wrangler.toml` file with:
+  ```shell
+  [[d1_databases]]
+  binding = "DB"
+  database_name = "robots-txt-analyzer"
+  database_id = "YOUR-DATABASE-ID" 
   ```
 
 ### Getting Started
@@ -59,6 +66,9 @@ This project is deployed on Cloudflare Pages. The build configuration is:
 - Environment variables:
   - `ORIGIN`: Your production URL
   - `API_KEY`: Your API key for the analyzer
+  - `DB`: Your Cloudflare D1 database ID
+- `wrangler.toml`: Your Cloudflare D1 database ID
+  - `wrangler.toml.example`: Example `wrangler.toml` file
 
 Note: The `HISTORY_KV` is set under bindings in the Cloudflare dashboard.
 
@@ -87,6 +97,7 @@ Recommendation is to call this using a cron job.
 
 - [Qwik](https://qwik.dev/) - The web framework
 - [Cloudflare Pages](https://pages.cloudflare.com/) - Hosting platform
+- [Cloudflare D1](https://developers.cloudflare.com/d1/) - Database
 - [Tailwind CSS](https://tailwindcss.com/) - Styling
 
 ## Author

@@ -1,68 +1,44 @@
 import { type RequestHandler } from "@builder.io/qwik-city";
-import { type KVNamespace, createLocalKV } from "../../../../utils/local-kv";
+import type { D1Database } from "../../../../types/cloudflare";
+import { createLocalDB } from "../../../../utils/local-db";
 
-// TODO: Make this a POST request, and add security with API key
 export const onGet: RequestHandler = async ({ json, env, request }) => {
   const apiKey = env.get("API_KEY");
-  const historyKV = (typeof env.get("HISTORY_KV") === 'object' ? 
-    env.get("HISTORY_KV") : createLocalKV()) as KVNamespace;
+  const db = (typeof env.get("DB") === 'object' ? 
+    env.get("DB") : createLocalDB()) as D1Database;
 
   // Only allow requests with API key
   if (request.headers.get("X-API-Key") !== apiKey) {
     throw json(401, { error: "Unauthorized" });
   }
 
+  if (!db) {
+    throw json(500, { error: 'Database not available' });
+  }
+
   try {
-    const now = Date.now();
-    const stats = {
-      cache: { total: 0, deleted: 0 },
-      tempHistory: { total: 0, deleted: 0 }
-    };
-
     // Clean up old cache entries (older than 24 hours)
-    const cacheList = await historyKV.list({ prefix: 'cache:' });
-    stats.cache.total = cacheList.keys.length;
-    
-    await Promise.all(
-      cacheList.keys.map(async (key) => {
-        const value = await historyKV.get(key.name);
-        if (value) {
-          const parsed = JSON.parse(value);
-          const age = now - new Date(parsed.timestamp).getTime();
-          
-          if (age > 24 * 60 * 60 * 1000) {
-            await historyKV.delete(key.name);
-            stats.cache.deleted++;
-          }
-        }
-      })
-    );
+    const { changes: cacheDeleted } = await db.prepare(`
+      DELETE FROM cache 
+      WHERE timestamp < datetime('now', '-24 hours')
+    `).run();
 
-    // Clean up temporary history entries (older than 3 hours)
-    const tempList = await historyKV.list({ prefix: 'temp-history:' });
-    stats.tempHistory.total = tempList.keys.length;
-
-    await Promise.all(
-      tempList.keys.map(async (key) => {
-        const value = await historyKV.get(key.name);
-        if (value) {
-          const parsed = JSON.parse(value);
-          const age = now - new Date(parsed.timestamp).getTime();
-          
-          if (age > 3 * 60 * 60 * 1000) {
-            await historyKV.delete(key.name);
-            stats.tempHistory.deleted++;
-          }
-        }
-      })
-    );
+    // Clean up fake history entries (older than 1 hour)
+    const { changes: fakeDeleted } = await db.prepare(`
+      DELETE FROM analyses 
+      WHERE is_real = 0 
+      AND timestamp < datetime('now', '-1 hour')
+    `).run();
 
     json(200, {
       success: true,
-      cleaned: stats
+      cleaned: {
+        cache: cacheDeleted,
+        fakeHistory: fakeDeleted
+      }
     });
   } catch (error) {
     console.error('Cleanup error:', error);
-    throw json(500, { error: 'Failed to clean up KV store' });
+    throw json(500, { error: 'Failed to clean up database' });
   }
-};
+}; 
