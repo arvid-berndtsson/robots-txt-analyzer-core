@@ -3,6 +3,10 @@ import type { D1Database } from "../../../../types/cloudflare";
 import { createLocalDB } from "../../../../utils/local-db";
 
 export const onGet: RequestHandler = async ({ json, env, request }) => {
+  console.log('=== CLEANUP ENDPOINT CALLED ===');
+  console.log('Request URL:', request.url);
+  console.log('Request method:', request.method);
+
   const apiKey = env.get("API_KEY");
   const db = (typeof env.get("DB") === 'object' ? 
     env.get("DB") : createLocalDB()) as D1Database;
@@ -31,6 +35,11 @@ export const onGet: RequestHandler = async ({ json, env, request }) => {
       WHERE is_real = false 
       AND timestamp < ?
     `).bind(twoHoursAgo).run();
+
+    console.log('Cleanup results:', {
+      cacheDeleted,
+      fakeDeleted
+    });
 
     json(200, {
       success: true,
