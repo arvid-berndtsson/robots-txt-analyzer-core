@@ -20,53 +20,44 @@ class LocalPreparedStatement implements D1PreparedStatement {
   private values: any[] = [];
 
   constructor(query: string) {
-    this.query = query.toLowerCase();
+    this.query = query;
     console.log('Query:', query);
     console.log('Values:', this.values);
   }
 
   bind(...values: any[]): D1PreparedStatement {
-    this.values = values;
-    console.log('Binding values:', values);
+    this.values = values.map(value => {
+      // Convert JavaScript types to SQL types
+      if (typeof value === 'boolean') {
+        return value ? 1 : 0; // SQLite stores booleans as integers
+      }
+      return value;
+    });
+    console.log('Binding values:', this.values);
     return this;
   }
 
   async all<T = unknown>(): Promise<D1Result<T>> {
-    if (this.query.includes("from cache")) {
-      if (this.query.includes("where domain =")) {
-        const domain = this.values[0];
-        const result = cache.get(domain);
-        logDbState(`Cache lookup for ${domain}`);
-        return { results: result ? [result] : [], success: true };
-      }
-      logDbState('List all cache');
-      return { results: Array.from(cache.values()), success: true };
-    }
-
-    if (this.query.includes("from analyses")) {
+    // Parse the SQL query to determine the operation
+    const normalizedQuery = this.query.toLowerCase().trim();
+    
+    if (normalizedQuery.startsWith('select')) {
       let results = Array.from(analyses.values());
-      console.log('Initial results:', results);
 
-      // Apply WHERE clause if present
-      if (this.query.includes("where is_real = 1")) {
-        console.log('Filtering for real entries...');
-        results = results.filter(entry => {
-          console.log('Entry:', entry, 'is_real:', entry.is_real);
-          return entry.is_real === true;
-        });
-        console.log('After is_real filter:', results);
+      // Handle WHERE clauses
+      if (normalizedQuery.includes('where')) {
+        const whereClause = normalizedQuery.split('where')[1].split('order')[0].trim();
+        
+        if (whereClause.includes('is_real = 1') || whereClause.includes('is_real = true')) {
+          results = results.filter(entry => entry.is_real === true);
+        } else if (whereClause.includes('is_real = 0') || whereClause.includes('is_real = false')) {
+          results = results.filter(entry => entry.is_real === false);
+        }
       }
 
-      // Sort by timestamp if requested
-      if (this.query.includes("order by timestamp desc")) {
+      // Handle ORDER BY
+      if (normalizedQuery.includes('order by timestamp desc')) {
         results.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-        console.log('After sorting:', results);
-      }
-
-      // Apply LIMIT if present
-      if (this.query.includes("limit 25")) {
-        results = results.slice(0, 25);
-        console.log('After limit:', results);
       }
 
       logDbState('Query analyses');
@@ -77,66 +68,48 @@ class LocalPreparedStatement implements D1PreparedStatement {
   }
 
   async run(): Promise<D1Result> {
-    if (this.query.includes("insert into cache")) {
-      const [domain, result] = this.values;
-      cache.set(domain, { result, timestamp: new Date().toISOString() });
-      logDbState(`Cache insert for ${domain}`);
-      return { results: [], success: true, changes: 1 };
-    }
+    const normalizedQuery = this.query.toLowerCase().trim();
 
-    if (this.query.includes("insert into analyses")) {
-      const [domain, url] = this.values;
-      console.log('Inserting analysis:', { domain, url });
-
-      // Check for existing entry in the last minute
-      const recentEntry = Array.from(analyses.values()).find(entry => {
-        const age = Date.now() - new Date(entry.timestamp).getTime();
-        return entry.domain === domain && age < 60000;
-      });
-
-      if (recentEntry) {
-        console.log('Found recent entry, skipping insert');
-        return { results: [], success: true, changes: 0 };
-      }
-
-      const id = analysisId++;
-      const entry = {
-        id,
-        domain,
-        url,
-        timestamp: new Date().toISOString(),
-        is_real: true // Always true for real entries
-      };
-      console.log('Created entry:', entry);
-      analyses.set(id.toString(), entry);
-      logDbState(`Analysis insert for ${domain}`);
-      return { results: [], success: true, changes: 1 };
-    }
-
-    if (this.query.includes("delete from cache")) {
+    if (normalizedQuery.startsWith('insert into analyses')) {
       let changes = 0;
-      for (const [key, value] of cache.entries()) {
-        const age = Date.now() - new Date(value.timestamp).getTime();
-        if (age > 24 * 60 * 60 * 1000) {
-          cache.delete(key);
-          changes++;
-        }
+      const valueGroups = this.values.length / 4;
+
+      for (let i = 0; i < valueGroups; i++) {
+        const baseIndex = i * 4;
+        const domain = this.values[baseIndex];
+        const url = this.values[baseIndex + 1];
+        const timestamp = this.values[baseIndex + 2];
+        const is_real = Boolean(this.values[baseIndex + 3]); // Convert SQLite integer to boolean
+
+        const id = analysisId++;
+        const entry = {
+          id,
+          domain,
+          url,
+          timestamp,
+          is_real
+        };
+        analyses.set(id.toString(), entry);
+        changes++;
       }
-      logDbState('Cache cleanup');
+
+      logDbState(`Analysis insert - ${changes} rows`);
       return { results: [], success: true, changes };
     }
 
-    if (this.query.includes("delete from analyses")) {
+    if (normalizedQuery.startsWith('delete from analyses')) {
       let changes = 0;
-      for (const [key, value] of analyses.entries()) {
-        if (!value.is_real) {
-          const age = Date.now() - new Date(value.timestamp).getTime();
-          if (age > 60 * 60 * 1000) {
+      const whereClause = normalizedQuery.split('where')[1]?.trim();
+
+      if (whereClause?.includes('is_real = 0') || whereClause?.includes('is_real = false')) {
+        for (const [key, value] of analyses.entries()) {
+          if (!value.is_real) {
             analyses.delete(key);
             changes++;
           }
         }
       }
+
       logDbState('Analysis cleanup');
       return { results: [], success: true, changes };
     }

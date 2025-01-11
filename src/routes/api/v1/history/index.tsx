@@ -7,6 +7,7 @@ interface HistoryEntry {
   domain: string;
   url: string;
   timestamp: string;
+  is_real: boolean;
 }
 
 // Generate a fake entry
@@ -17,14 +18,9 @@ function generateFakeEntry(timestamp: Date): HistoryEntry {
   return {
     url: fullUrl,
     domain: new URL(fullUrl).hostname,
-    timestamp: timestamp.toISOString()
+    timestamp: timestamp.toISOString(),
+    is_real: false
   };
-}
-
-interface HistoryEntry {
-  url: string;
-  domain: string;
-  timestamp: string;
 }
 
 export const onGet: RequestHandler = async ({ json, env, request }) => {
@@ -47,66 +43,82 @@ export const onGet: RequestHandler = async ({ json, env, request }) => {
   }
 
   try {
-    // Get the 25 most recent entries from the last 2 hours
+    // Get all entries (both real and fake)
     console.log('History: Fetching entries...');
-    const twoHoursAgo = new Date(Date.now() - 7200000).toISOString();
     const stmt = db.prepare(`
-      SELECT domain, url, timestamp 
+      SELECT domain, url, timestamp, is_real
       FROM analyses 
-      WHERE timestamp > ?
       ORDER BY timestamp DESC
-      LIMIT 25
-    `).bind(twoHoursAgo);
+    `);
     console.log('History: Prepared statement:', stmt);
-    const { results: entries } = await stmt.all<HistoryEntry>();
-    console.log('History: Entries:', entries);
+    const { results: existingEntries } = await stmt.all<HistoryEntry>();
+    console.log('History: Found', existingEntries.length, 'total entries');
 
-    // If we have 25 entries, return them
-    if (entries.length >= 25) {
-      json(200, entries);
+    // Check how many recent entries we have in the last 2 hours
+    const twoHoursAgo = Date.now() - 7200000;
+    const recentEntries = existingEntries.filter(
+      entry => new Date(entry.timestamp).getTime() > twoHoursAgo
+    );
+
+    // If we have enough recent entries, return all entries
+    if (recentEntries.length >= 10) {
+      json(200, existingEntries);
       return;
     }
 
-    // Delete any existing fake entries older than 2 hours
+    // Delete any existing fake entries
     await db.prepare(`
       DELETE FROM analyses 
-      WHERE is_real = 0 
-      AND timestamp < ?
-    `).bind(twoHoursAgo).run();
+      WHERE is_real = false
+    `).run();
 
-    // Generate fake entries if needed
-    const neededEntries = 25 - entries.length;
-    let lastTimestamp = Date.now();
+    // Generate fake entries if needed to show activity in last 2 hours
+    const neededEntries = 10 - recentEntries.length;
+    const now = Date.now();
+    console.log('History: Generating', neededEntries, 'fake entries');
+    
+    // Calculate time slots for even distribution
+    const timeSlotSize = Math.floor(7200000 / neededEntries);
     const fakeEntries: HistoryEntry[] = [];
 
+    // Generate all fake entries first
     for (let i = 0; i < neededEntries; i++) {
-      // Random delay between 1-7 minutes
-      const randomDelay = Math.floor(Math.random() * (420000 - 60000 + 1) + 60000);
-      lastTimestamp -= randomDelay;
+      // Calculate a random time within this slot
+      const slotStart = now - (i * timeSlotSize);
+      const slotEnd = slotStart - timeSlotSize;
+      const randomTime = Math.floor(Math.random() * (slotStart - slotEnd) + slotEnd);
       
-      // Don't add entries older than 2 hours
-      if (Date.now() - lastTimestamp > 7200000) break;
-
-      const timestamp = new Date(lastTimestamp);
-      const fakeEntry = generateFakeEntry(timestamp);
-      
-      // Save the fake entry to the database
-      await db.prepare(`
-        INSERT INTO analyses (domain, url, timestamp, is_real) 
-        VALUES (?, ?, ?, 0)
-      `).bind(
-        fakeEntry.domain,
-        fakeEntry.url,
-        fakeEntry.timestamp
-      ).run();
-
-      fakeEntries.push(fakeEntry);
+      const timestamp = new Date(randomTime);
+      fakeEntries.push(generateFakeEntry(timestamp));
     }
 
-    // Combine all entries and sort by timestamp
-    const allEntries = [...entries, ...fakeEntries].sort((a, b) => 
+    // Sort fake entries by timestamp
+    fakeEntries.sort((a, b) => 
       new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
     );
+
+    // Insert all fake entries in a single batch
+    const placeholders = fakeEntries.map(() => '(?, ?, ?, ?)').join(', ');
+    const values = fakeEntries.flatMap(entry => [
+      entry.domain,
+      entry.url,
+      entry.timestamp,
+      false // Explicitly set is_real to false for fake entries
+    ]);
+
+    await db.prepare(`
+      INSERT INTO analyses (domain, url, timestamp, is_real) 
+      VALUES ${placeholders}
+    `).bind(...values).run();
+
+    // Get all entries including the newly added fake ones
+    const { results: allEntries } = await db.prepare(`
+      SELECT domain, url, timestamp, is_real
+      FROM analyses 
+      ORDER BY timestamp DESC
+    `).all<HistoryEntry>();
+    
+    console.log('History: Returning', allEntries.length, 'total entries');
 
     json(200, allEntries);
   } catch (error) {
