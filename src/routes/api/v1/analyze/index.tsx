@@ -41,7 +41,7 @@ export const onPost: RequestHandler = async ({ json, parseBody, env, request }) 
     const domain = new URL(normalizedUrl).hostname;
     
     // Check cache first
-    const cachedResult = await historyKV.get(`analysis:${domain}`);
+    const cachedResult = await historyKV.get(`cache:${domain}`);
     if (cachedResult) {
       const parsed = JSON.parse(cachedResult);
       const cacheAge = Date.now() - new Date(parsed.timestamp).getTime();
@@ -114,7 +114,20 @@ export const onPost: RequestHandler = async ({ json, parseBody, env, request }) 
     };
 
     // Cache the result
-    await historyKV.put(`analysis:${domain}`, JSON.stringify(result));
+    await historyKV.put(`cache:${domain}`, JSON.stringify(result));
+
+    // Save the result to history
+    if (historyKV) {
+      const historyEntry = {
+        url: normalizedUrl,
+        domain: domain,
+        timestamp: new Date().toISOString()
+      };
+      await historyKV.put(
+        `history:${domain}:${historyEntry.timestamp}`,
+        JSON.stringify(historyEntry)
+      );
+    }
 
     json(200, result);
     return;

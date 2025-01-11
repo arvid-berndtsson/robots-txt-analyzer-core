@@ -52,10 +52,10 @@ export const onGet: RequestHandler = async ({ json, env, request }) => {
   }
 
   try {
-    // Get all entries from KV
-    const list = await historyKV.list({ prefix: 'analysis:' });
-    const entries = await Promise.all(
-      list.keys.map(async (key) => {
+    // Get real entries
+    const realList = await historyKV.list({ prefix: 'history:' });
+    const realEntries = await Promise.all(
+      realList.keys.map(async (key) => {
         try {
           const value = await historyKV.get(key.name);
           if (!value) return null;
@@ -72,38 +72,72 @@ export const onGet: RequestHandler = async ({ json, env, request }) => {
       })
     );
 
-    // Filter out nulls and old entries
-    const now = new Date();
-    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
-    const validEntries = entries
+    // Filter valid entries and sort by timestamp
+    const validRealEntries = realEntries
       .filter((entry): entry is HistoryEntry => entry !== null)
-      .filter(entry => new Date(entry.timestamp) > oneHourAgo);
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .slice(0, 25); // Only take latest 25
 
-    // If we have less than 25 entries, generate and save fake ones
-    if (validEntries.length < 25) {
-      const neededEntries = 25 - validEntries.length;
-      let lastTimestamp = oneHourAgo.getTime();
-      
-      for (let i = 0; i < neededEntries; i++) {
-        const randomDelay = Math.floor(Math.random() * (180 - 60 + 1) + 60) * 1000; // 60-180 seconds
-        lastTimestamp += randomDelay;
-        const fakeEntry = generateFakeEntry(new Date(lastTimestamp));
-        
-        // Save fake entry to KV
-        await historyKV.put(
-          `analysis:${fakeEntry.domain}:${fakeEntry.timestamp}`, 
-          JSON.stringify(fakeEntry)
-        );
-        validEntries.push(fakeEntry);
-      }
-    }
-
-    // Sort by timestamp
-    const sortedEntries = validEntries.sort((a, b) => 
-      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    // Get existing temporary entries
+    const tempList = await historyKV.list({ prefix: 'temp-history:' });
+    const tempEntries = await Promise.all(
+      tempList.keys.map(async (key) => {
+        try {
+          const value = await historyKV.get(key.name);
+          if (!value) return null;
+          const data = JSON.parse(value);
+          return {
+            url: data.url,
+            domain: data.domain,
+            timestamp: data.timestamp
+          };
+        } catch (e) {
+          console.error(`Failed to parse temp entry ${key.name}:`, e);
+          return null;
+        }
+      })
     );
 
-    json(200, sortedEntries);
+    const validTempEntries = tempEntries
+      .filter((entry): entry is HistoryEntry => entry !== null)
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+    // Combine real and temp entries
+    const entries = [...validRealEntries];
+    
+    // If we have less than 25 entries, add existing temp entries and generate new ones if needed
+    if (entries.length < 25) {
+      entries.push(...validTempEntries);
+      
+      // If we still need more entries
+      if (entries.length < 25) {
+        const neededEntries = 25 - entries.length;
+        
+        // Start from most recent entry or current time
+        let lastTimestamp = entries.length > 0 
+          ? new Date(entries[0].timestamp).getTime()
+          : Date.now();
+        
+        for (let i = 0; i < neededEntries; i++) {
+          // Random delay between 1-5 minutes (60000-300000 ms)
+          const randomDelay = Math.floor(Math.random() * (300000 - 60000 + 1) + 60000);
+          lastTimestamp -= randomDelay; // Subtract delay to go backwards in time
+          const tempEntry = generateFakeEntry(new Date(lastTimestamp));
+          
+          // Save temporary entry to KV
+          await historyKV.put(
+            `temp-history:${tempEntry.domain}:${tempEntry.timestamp}`, 
+            JSON.stringify(tempEntry)
+          );
+          entries.push(tempEntry);
+        }
+      }
+
+      // Sort all entries by timestamp
+      entries.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    }
+
+    json(200, entries.slice(0, 25));
   } catch (error) {
     console.error('Error:', error);
     throw json(500, { error: 'Failed to fetch history' });
