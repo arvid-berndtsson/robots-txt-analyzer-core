@@ -1,6 +1,25 @@
 import { type RequestHandler } from '@builder.io/qwik-city';
-import { exampleUrls } from '../../../../data/example-urls';
-import { type KVNamespace, createLocalKV } from "../../../../utils/local-kv";
+import { exampleUrls } from "~/data/example-urls";
+import type { D1Database } from "../../../../types/cloudflare";
+import { createLocalDB } from "../../../../utils/local-db";
+
+interface HistoryEntry {
+  domain: string;
+  url: string;
+  timestamp: string;
+}
+
+// Generate a fake entry
+function generateFakeEntry(timestamp: Date): HistoryEntry {
+  const randomUrl = exampleUrls[Math.floor(Math.random() * exampleUrls.length)];
+  // Ensure URL has a protocol
+  const fullUrl = randomUrl.startsWith('http') ? randomUrl : `https://${randomUrl}`;
+  return {
+    url: fullUrl,
+    domain: new URL(fullUrl).hostname,
+    timestamp: timestamp.toISOString()
+  };
+}
 
 interface HistoryEntry {
   url: string;
@@ -32,113 +51,88 @@ interface HistoryEntry {
   raw_content?: string;
 }
 
-// Generate a fake history entry
-function generateFakeEntry(timestamp: Date): HistoryEntry {
-  const domain = exampleUrls[Math.floor(Math.random() * exampleUrls.length)];
-  return {
-    url: `https://${domain}`,
-    domain,
-    timestamp: timestamp.toISOString()
-  };
-}
-
 // TODO: Make more secure with API key
 export const onGet: RequestHandler = async ({ json, env, request }) => {
+  console.log('=== HISTORY ENDPOINT CALLED ===');
+  console.log('Request URL:', request.url);
+  console.log('Request method:', request.method);
+  
   const apiKey = env.get("API_KEY");
-  const historyKV = (typeof env.get("HISTORY_KV") === 'object' ? 
-    env.get("HISTORY_KV") : createLocalKV()) as KVNamespace;
+  console.log('History: DB from env:', typeof env.get("DB"));
+  const db = (typeof env.get("DB") === 'object' ? 
+    env.get("DB") : createLocalDB()) as D1Database;
+  console.log('History: Using local DB:', typeof env.get("DB") !== 'object');
 
   if (request.headers.get("X-API-Key") !== apiKey) {
     throw json(401, { error: "Unauthorized" });
   }
 
+  if (!db) {
+    throw json(500, { error: 'Database not available' });
+  }
+
   try {
-    // Get real entries
-    const realList = await historyKV.list({ prefix: 'history:' });
-    const realEntries = await Promise.all(
-      realList.keys.map(async (key) => {
-        try {
-          const value = await historyKV.get(key.name);
-          if (!value) return null;
-          const data = JSON.parse(value);
-          return {
-            url: data.url,
-            domain: data.domain,
-            timestamp: data.timestamp
-          };
-        } catch (e) {
-          console.error(`Failed to parse history entry ${key.name}:`, e);
-          return null;
-        }
-      })
-    );
+    // Get the 25 most recent entries from the last 2 hours
+    console.log('History: Fetching entries...');
+    const stmt = db.prepare(`
+      SELECT domain, url, timestamp 
+      FROM analyses 
+      WHERE timestamp > datetime('now', '-2 hours')
+      ORDER BY timestamp DESC
+      LIMIT 25
+    `);
+    console.log('History: Prepared statement:', stmt);
+    const { results: entries } = await stmt.all<HistoryEntry>();
+    console.log('History: Entries:', entries);
 
-    // Filter valid entries and sort by timestamp
-    const validRealEntries = realEntries
-      .filter((entry): entry is HistoryEntry => entry !== null)
-      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-      .slice(0, 25); // Only take latest 25
-
-    // Get existing temporary entries
-    const tempList = await historyKV.list({ prefix: 'temp-history:' });
-    const tempEntries = await Promise.all(
-      tempList.keys.map(async (key) => {
-        try {
-          const value = await historyKV.get(key.name);
-          if (!value) return null;
-          const data = JSON.parse(value);
-          return {
-            url: data.url,
-            domain: data.domain,
-            timestamp: data.timestamp
-          };
-        } catch (e) {
-          console.error(`Failed to parse temp entry ${key.name}:`, e);
-          return null;
-        }
-      })
-    );
-
-    const validTempEntries = tempEntries
-      .filter((entry): entry is HistoryEntry => entry !== null)
-      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-
-    // Combine real and temp entries
-    const entries = [...validRealEntries];
-    
-    // If we have less than 25 entries, add existing temp entries and generate new ones if needed
-    if (entries.length < 25) {
-      entries.push(...validTempEntries);
-      
-      // If we still need more entries
-      if (entries.length < 25) {
-        const neededEntries = 25 - entries.length;
-        
-        // Start from most recent entry or current time
-        let lastTimestamp = entries.length > 0 
-          ? new Date(entries[0].timestamp).getTime()
-          : Date.now();
-        
-        for (let i = 0; i < neededEntries; i++) {
-          // Random delay between 1-5 minutes (60000-300000 ms)
-          const randomDelay = Math.floor(Math.random() * (300000 - 60000 + 1) + 60000);
-          lastTimestamp -= randomDelay; // Subtract delay to go backwards in time
-          const tempEntry = generateFakeEntry(new Date(lastTimestamp));
-          
-          // Save temporary entry to KV
-          await historyKV.put(
-            `temp-history:${tempEntry.domain}:${tempEntry.timestamp}`, 
-            JSON.stringify(tempEntry)
-          );
-          entries.push(tempEntry);
-        }
-      }
-
-      // Sort all entries by timestamp
-      entries.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    // If we have 25 entries, return them
+    if (entries.length >= 25) {
+      json(200, entries);
+      return;
     }
 
-    json(200, entries.slice(0, 25));
+    // Delete any existing fake entries older than 2 hours
+    await db.prepare(`
+      DELETE FROM analyses 
+      WHERE is_real = 0 
+      AND timestamp < datetime('now', '-2 hours')
+    `).run();
+
+    // Generate fake entries if needed
+    const neededEntries = 25 - entries.length;
+    let lastTimestamp = Date.now();
+    const fakeEntries: HistoryEntry[] = [];
+
+    for (let i = 0; i < neededEntries; i++) {
+      // Random delay between 1-7 minutes
+      const randomDelay = Math.floor(Math.random() * (420000 - 60000 + 1) + 60000);
+      lastTimestamp -= randomDelay;
+      
+      // Don't add entries older than 2 hours
+      if (Date.now() - lastTimestamp > 7200000) break;
+
+      const timestamp = new Date(lastTimestamp);
+      const fakeEntry = generateFakeEntry(timestamp);
+      
+      // Save the fake entry to the database
+      await db.prepare(`
+        INSERT INTO analyses (domain, url, timestamp, is_real) 
+        VALUES (?, ?, ?, 0)
+      `).bind(
+        fakeEntry.domain,
+        fakeEntry.url,
+        timestamp.toISOString()
+      ).run();
+
+      fakeEntries.push(fakeEntry);
+    }
+
+    // Combine all entries and sort by timestamp
+    const allEntries = [...entries, ...fakeEntries].sort((a, b) => 
+      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+
+    json(200, allEntries);
   } catch (error) {
     console.error('Error:', error);
     throw json(500, { error: 'Failed to fetch history' });

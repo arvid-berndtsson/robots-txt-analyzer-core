@@ -2,10 +2,9 @@ import {
   component$,
   useSignal,
   $,
-  useTask$,
-  useOnDocument,
+  useOnWindow,
 } from "@builder.io/qwik";
-import { useNavigate, useLocation, server$ } from "@builder.io/qwik-city";
+import { useNavigate, server$ } from "@builder.io/qwik-city";
 import { DocumentHead } from "@builder.io/qwik-city";
 
 interface Recommendation {
@@ -81,9 +80,10 @@ export default component$(() => {
   const error = useSignal("");
   const isLoading = useSignal(false);
   const navigate = useNavigate();
-  const location = useLocation();
 
   const analyzeRobotsTxtFile = $(async (inputUrl: string) => {
+    if (!inputUrl) return;
+    
     isLoading.value = true;
     error.value = "";
     result.value = null;
@@ -108,23 +108,15 @@ export default component$(() => {
     }
   });
 
-  useTask$(({ track }) => {
-    const urlParam = track(() => location.url.searchParams.get("url"));
-    if (urlParam) {
-      url.value = urlParam;
-      analyzeRobotsTxtFile(urlParam);
-    }
-  });
-
-  useOnDocument(
+  // Check for URL parameter and analyze directly
+  useOnWindow(
     "DOMContentLoaded",
     $(() => {
       const urlParam = new URLSearchParams(window.location.search).get("url");
       if (urlParam) {
-        url.value = urlParam;
         analyzeRobotsTxtFile(urlParam);
       }
-    }),
+    })
   );
 
   return (

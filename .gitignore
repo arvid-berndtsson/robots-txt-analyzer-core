@@ -46,3 +46,5 @@ functions/**/*.js
 
 # Environment variables
 .dev.vars
+wrangler.toml
+.wrangler
