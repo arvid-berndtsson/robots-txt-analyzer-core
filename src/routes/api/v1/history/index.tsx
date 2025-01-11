@@ -61,7 +61,7 @@ export const onGet: RequestHandler = async ({ json, env, request }) => {
     );
 
     // If we have enough recent entries, return all entries
-    if (recentEntries.length >= 10) {
+    if (recentEntries.length >= 50) {
       json(200, existingEntries);
       return;
     }
@@ -73,23 +73,64 @@ export const onGet: RequestHandler = async ({ json, env, request }) => {
     `).run();
 
     // Generate fake entries if needed to show activity in last 2 hours
-    const neededEntries = 10 - recentEntries.length;
+    const neededEntries = 50 - recentEntries.length;
     const now = Date.now();
     console.log('History: Generating', neededEntries, 'fake entries');
     
-    // Calculate time slots for even distribution
-    const timeSlotSize = Math.floor(7200000 / neededEntries);
+    // Create user session patterns (people coming in, doing a few scans, then leaving)
+    const sessions = [
+      { size: 4, timeSpan: 120000 },   // Someone scanning 4 sites in 2 minutes
+      { size: 2, timeSpan: 60000 },    // Quick check of 2 sites in 1 minute
+      { size: 7, timeSpan: 300000 },   // Thorough check of 7 sites in 5 minutes
+      { size: 3, timeSpan: 90000 },    // 3 quick scans in 1.5 minutes
+      { size: 5, timeSpan: 180000 },   // 5 scans in 3 minutes
+      { size: 2, timeSpan: 45000 },    // 2 quick comparisons
+      { size: 6, timeSpan: 240000 },   // 6 sites in 4 minutes
+      { size: 3, timeSpan: 120000 },   // 3 scans in 2 minutes
+      { size: 4, timeSpan: 150000 },   // 4 scans in 2.5 minutes
+      { size: 3, timeSpan: 90000 },    // 3 more quick scans
+    ];
+    
     const fakeEntries: HistoryEntry[] = [];
+    let entriesNeeded = neededEntries;
+    let currentTime = now;
 
-    // Generate all fake entries first
-    for (let i = 0; i < neededEntries; i++) {
-      // Calculate a random time within this slot
-      const slotStart = now - (i * timeSlotSize);
-      const slotEnd = slotStart - timeSlotSize;
-      const randomTime = Math.floor(Math.random() * (slotStart - slotEnd) + slotEnd);
-      
-      const timestamp = new Date(randomTime);
+    // Distribute sessions across the 2-hour window
+    while (entriesNeeded > 0 && sessions.length > 0) {
+      // Pick a random session pattern
+      const sessionIndex = Math.floor(Math.random() * sessions.length);
+      const session = sessions[sessionIndex];
+      sessions.splice(sessionIndex, 1); // Remove used session
+
+      // Skip if this session would create too many entries
+      if (session.size > entriesNeeded) {
+        continue;
+      }
+
+      // Add some random gap between sessions (2-15 minutes)
+      currentTime -= Math.floor(Math.random() * 780000) + 120000;
+
+      // Generate entries for this session
+      for (let i = 0; i < session.size; i++) {
+        // Calculate time within session (slightly random intervals)
+        const progress = i / (session.size - 1);
+        const baseOffset = session.timeSpan * progress;
+        const randomVariation = Math.floor(Math.random() * 15000); // Up to 15 seconds variation
+        const timestamp = new Date(currentTime - baseOffset - randomVariation);
+
+        fakeEntries.push(generateFakeEntry(timestamp));
+      }
+
+      entriesNeeded -= session.size;
+    }
+
+    // If we still need entries, add some individual scans
+    while (entriesNeeded > 0) {
+      // Random time in the remaining window
+      const randomTime = Math.floor(Math.random() * 7200000);
+      const timestamp = new Date(now - randomTime);
       fakeEntries.push(generateFakeEntry(timestamp));
+      entriesNeeded--;
     }
 
     // Sort fake entries by timestamp
