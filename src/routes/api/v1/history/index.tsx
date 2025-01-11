@@ -25,33 +25,8 @@ interface HistoryEntry {
   url: string;
   domain: string;
   timestamp: string;
-  rules?: Array<{
-    userAgent: string;
-    isGlobal: boolean;
-    disallowedPaths: string[];
-    allowedPaths: string[];
-    crawlDelay?: number;
-  }>;
-  summary?: {
-    totalRules: number;
-    hasGlobalRule: boolean;
-    totalSitemaps: number;
-    score: number;
-    status: '✅ All Good' | '⚠️ Some Issues' | '❌ Major Issues' | '❓ Potential Issues';
-  };
-  sitemaps?: {
-    urls: string[];
-    issues: string[];
-  };
-  recommendations?: Array<{
-    message: string;
-    severity: 'error' | 'warning' | 'info' | 'potential';
-    details?: string;
-  }>;
-  raw_content?: string;
 }
 
-// TODO: Make more secure with API key
 export const onGet: RequestHandler = async ({ json, env, request }) => {
   console.log('=== HISTORY ENDPOINT CALLED ===');
   console.log('Request URL:', request.url);
@@ -74,13 +49,14 @@ export const onGet: RequestHandler = async ({ json, env, request }) => {
   try {
     // Get the 25 most recent entries from the last 2 hours
     console.log('History: Fetching entries...');
+    const twoHoursAgo = new Date(Date.now() - 7200000).toISOString();
     const stmt = db.prepare(`
       SELECT domain, url, timestamp 
       FROM analyses 
-      WHERE timestamp > datetime('now', '-2 hours')
+      WHERE timestamp > ?
       ORDER BY timestamp DESC
       LIMIT 25
-    `);
+    `).bind(twoHoursAgo);
     console.log('History: Prepared statement:', stmt);
     const { results: entries } = await stmt.all<HistoryEntry>();
     console.log('History: Entries:', entries);
@@ -95,8 +71,8 @@ export const onGet: RequestHandler = async ({ json, env, request }) => {
     await db.prepare(`
       DELETE FROM analyses 
       WHERE is_real = 0 
-      AND timestamp < datetime('now', '-2 hours')
-    `).run();
+      AND timestamp < ?
+    `).bind(twoHoursAgo).run();
 
     // Generate fake entries if needed
     const neededEntries = 25 - entries.length;
@@ -121,7 +97,7 @@ export const onGet: RequestHandler = async ({ json, env, request }) => {
       `).bind(
         fakeEntry.domain,
         fakeEntry.url,
-        timestamp.toISOString()
+        fakeEntry.timestamp
       ).run();
 
       fakeEntries.push(fakeEntry);
