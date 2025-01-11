@@ -1,4 +1,4 @@
-import { type RequestHandler } from '@builder.io/qwik-city';
+import { type RequestHandler } from "@builder.io/qwik-city";
 import { exampleUrls } from "~/data/example-urls";
 import type { D1Database } from "../../../../types/cloudflare";
 import { createLocalDB } from "../../../../utils/local-db";
@@ -14,83 +14,81 @@ interface HistoryEntry {
 function generateFakeEntry(timestamp: Date): HistoryEntry {
   const randomUrl = exampleUrls[Math.floor(Math.random() * exampleUrls.length)];
   // Ensure URL has a protocol
-  const fullUrl = randomUrl.startsWith('http') ? randomUrl : `https://${randomUrl}`;
+  const fullUrl = randomUrl.startsWith("http")
+    ? randomUrl
+    : `https://${randomUrl}`;
   return {
     url: fullUrl,
     domain: new URL(fullUrl).hostname,
     timestamp: timestamp.toISOString(),
-    is_real: false
+    is_real: false,
   };
 }
 
 export const onGet: RequestHandler = async ({ json, env, request }) => {
-  console.log('=== HISTORY ENDPOINT CALLED ===');
-  console.log('Request URL:', request.url);
-  console.log('Request method:', request.method);
-  
+  console.log("=== HISTORY ENDPOINT CALLED ===");
+  console.log("Request URL:", request.url);
+  console.log("Request method:", request.method);
+
   const apiKey = env.get("API_KEY");
-  console.log('History: DB from env:', typeof env.get("DB"));
-  const db = (typeof env.get("DB") === 'object' ? 
-    env.get("DB") : createLocalDB()) as D1Database;
-  console.log('History: Using local DB:', typeof env.get("DB") !== 'object');
+  console.log("History: DB from env:", typeof env.get("DB"));
+  const db = (
+    typeof env.get("DB") === "object" ? env.get("DB") : createLocalDB()
+  ) as D1Database;
+  console.log("History: Using local DB:", typeof env.get("DB") !== "object");
 
   if (request.headers.get("X-API-Key") !== apiKey) {
     throw json(401, { error: "Unauthorized" });
   }
 
   if (!db) {
-    throw json(500, { error: 'Database not available' });
+    throw json(500, { error: "Database not available" });
   }
 
   try {
-    // Get all entries (both real and fake)
-    console.log('History: Fetching entries...');
+    // Get recent entries first with a limit
+    console.log("History: Fetching entries...");
     const stmt = db.prepare(`
       SELECT domain, url, timestamp, is_real
       FROM analyses 
+      WHERE timestamp > datetime('now', '-2 hours')
       ORDER BY timestamp DESC
+      LIMIT 25
     `);
-    console.log('History: Prepared statement:', stmt);
-    const { results: existingEntries } = await stmt.all<HistoryEntry>();
-    console.log('History: Found', existingEntries.length, 'total entries');
+    console.log("History: Prepared statement:", stmt);
+    const { results: recentEntries } = await stmt.all<HistoryEntry>();
+    console.log("History: Found", recentEntries.length, "recent entries");
 
-    // Check how many recent entries we have in the last 2 hours
-    const twoHoursAgo = Date.now() - 7200000;
-    const recentEntries = existingEntries.filter(
-      entry => new Date(entry.timestamp).getTime() > twoHoursAgo
-    );
-
-    // If we have enough recent entries, return all entries
-    if (recentEntries.length >= 50) {
-      json(200, existingEntries);
+    // If we have enough recent entries, return them
+    if (recentEntries.length >= 25) {
+      json(200, recentEntries);
       return;
     }
 
     // Delete any existing fake entries
-    await db.prepare(`
+    await db
+      .prepare(
+        `
       DELETE FROM analyses 
       WHERE is_real = false
-    `).run();
+    `,
+      )
+      .run();
 
     // Generate fake entries if needed to show activity in last 2 hours
-    const neededEntries = 50 - recentEntries.length;
+    const neededEntries = 25 - recentEntries.length;
     const now = Date.now();
-    console.log('History: Generating', neededEntries, 'fake entries');
-    
-    // Create user session patterns (people coming in, doing a few scans, then leaving)
+    console.log("History: Generating", neededEntries, "fake entries");
+
+    // Create user session patterns (reduced and simplified)
     const sessions = [
-      { size: 4, timeSpan: 120000 },   // Someone scanning 4 sites in 2 minutes
-      { size: 2, timeSpan: 60000 },    // Quick check of 2 sites in 1 minute
-      { size: 7, timeSpan: 300000 },   // Thorough check of 7 sites in 5 minutes
-      { size: 3, timeSpan: 90000 },    // 3 quick scans in 1.5 minutes
-      { size: 5, timeSpan: 180000 },   // 5 scans in 3 minutes
-      { size: 2, timeSpan: 45000 },    // 2 quick comparisons
-      { size: 6, timeSpan: 240000 },   // 6 sites in 4 minutes
-      { size: 3, timeSpan: 120000 },   // 3 scans in 2 minutes
-      { size: 4, timeSpan: 150000 },   // 4 scans in 2.5 minutes
-      { size: 3, timeSpan: 90000 },    // 3 more quick scans
+      { size: 3, timeSpan: 120000 }, // Someone scanning 3 sites in 2 minutes
+      { size: 2, timeSpan: 60000 }, // Quick check of 2 sites in 1 minute
+      { size: 4, timeSpan: 180000 }, // 4 scans in 3 minutes
+      { size: 2, timeSpan: 45000 }, // 2 quick comparisons
+      { size: 3, timeSpan: 120000 }, // 3 scans in 2 minutes
     ];
-    
+
     const fakeEntries: HistoryEntry[] = [];
     let entriesNeeded = neededEntries;
     let currentTime = now;
@@ -134,35 +132,41 @@ export const onGet: RequestHandler = async ({ json, env, request }) => {
     }
 
     // Sort fake entries by timestamp
-    fakeEntries.sort((a, b) => 
-      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    fakeEntries.sort(
+      (a, b) =>
+        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
     );
 
     // Insert fake entries one by one (more compatible with D1)
     for (const entry of fakeEntries) {
-      await db.prepare(`
+      await db
+        .prepare(
+          `
         INSERT INTO analyses (domain, url, timestamp, is_real) 
         VALUES (?, ?, ?, ?)
-      `).bind(
-        entry.domain,
-        entry.url,
-        entry.timestamp,
-        0
-      ).run();
+      `,
+        )
+        .bind(entry.domain, entry.url, entry.timestamp, 0)
+        .run();
     }
 
-    // Get all entries including the newly added fake ones
-    const { results: allEntries } = await db.prepare(`
+    // Get final entries with limit
+    const { results: allEntries } = await db
+      .prepare(
+        `
       SELECT domain, url, timestamp, is_real
       FROM analyses 
       ORDER BY timestamp DESC
-    `).all<HistoryEntry>();
-    
-    console.log('History: Returning', allEntries.length, 'total entries');
+      LIMIT 25
+    `,
+      )
+      .all<HistoryEntry>();
+
+    console.log("History: Returning", allEntries.length, "total entries");
 
     json(200, allEntries);
   } catch (error) {
-    console.error('Error:', error);
-    throw json(500, { error: 'Failed to fetch history' });
+    console.error("Error:", error);
+    throw json(500, { error: "Failed to fetch history" });
   }
 };
