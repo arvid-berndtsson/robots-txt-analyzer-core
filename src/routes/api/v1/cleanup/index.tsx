@@ -23,11 +23,11 @@ export const onGet: RequestHandler = async ({ json, env, request }) => {
       WHERE timestamp < datetime('now', '-24 hours')
     `).run();
 
-    // Clean up fake history entries (older than 1 hour)
+    // Clean up fake history entries (older than 2 hours)
     const { changes: fakeDeleted } = await db.prepare(`
       DELETE FROM analyses 
       WHERE is_real = 0 
-      AND timestamp < datetime('now', '-1 hour')
+      AND timestamp < datetime('now', '-2 hours')
     `).run();
 
     json(200, {
