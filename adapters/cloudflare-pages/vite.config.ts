@@ -13,9 +13,18 @@ export default extendConfig(baseConfig, () => {
     plugins: [
       cloudflarePagesAdapter({
         ssg: {
-          include: ['/*'],
+          include: [
+            '/robots.txt',                 // Robots file
+            '/humans.txt',                 // Humans file
+            '/.well-known/security.txt',   // Security file
+            '/',                           // Homepage
+            '/learn',                      // Learning page
+            '/api/docs',                   // API documentation
+            '/about',                      // About page
+            '/privacy'                     // Privacy policy
+          ],
           origin: process.env.ORIGIN || 'https://robots-txt.arvid.tech',
-          sitemapOutFile: 'sitemap.xml',
+          sitemapOutFile: 'sitemap.xml'
         },
       }),
     ],
