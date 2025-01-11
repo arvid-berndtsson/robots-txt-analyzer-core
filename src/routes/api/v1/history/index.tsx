@@ -42,6 +42,7 @@ function generateFakeEntry(timestamp: Date): HistoryEntry {
   };
 }
 
+// TODO: Make more secure with API key
 export const onGet: RequestHandler = async ({ json, env, request }) => {
   const apiKey = env.get("API_KEY");
   const historyKV = (typeof env.get("HISTORY_KV") === 'object' ? 

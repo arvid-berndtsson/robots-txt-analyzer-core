@@ -62,6 +62,16 @@ This project is deployed on Cloudflare Pages. The build configuration is:
 
 Note: The `HISTORY_KV` is set under bindings in the Cloudflare dashboard.
 
+### Cleanup
+
+To cleanup old cache entries, you can run the cleanup endpoint. This will delete all cache entries older than 24 hours.
+
+```shell
+curl -X GET https://robots-txt.arvid.tech/api/v1/cleanup
+```
+
+Recommendation is to call this using a cron job.
+
 ## Project Structure
 
 ```
