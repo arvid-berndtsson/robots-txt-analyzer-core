@@ -19,7 +19,6 @@ export const onGet: RequestHandler = async ({ json, env, request }) => {
       tempHistory: { total: 0, deleted: 0 }
     };
 
-    // TODO: Verify that it should be 24 hours, I think it should be 6 hours
     // Clean up old cache entries (older than 24 hours)
     const cacheList = await historyKV.list({ prefix: 'cache:' });
     stats.cache.total = cacheList.keys.length;
@@ -39,8 +38,7 @@ export const onGet: RequestHandler = async ({ json, env, request }) => {
       })
     );
 
-    // TODO: Verify that it should be 1 hour, I think it should be 2 hours, based on how temp-history is generated
-    // Clean up temporary history entries (older than 1 hour)
+    // Clean up temporary history entries (older than 3 hours)
     const tempList = await historyKV.list({ prefix: 'temp-history:' });
     stats.tempHistory.total = tempList.keys.length;
 
@@ -51,7 +49,7 @@ export const onGet: RequestHandler = async ({ json, env, request }) => {
           const parsed = JSON.parse(value);
           const age = now - new Date(parsed.timestamp).getTime();
           
-          if (age > 60 * 60 * 1000) {
+          if (age > 3 * 60 * 60 * 1000) {
             await historyKV.delete(key.name);
             stats.tempHistory.deleted++;
           }
