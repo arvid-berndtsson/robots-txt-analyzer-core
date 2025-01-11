@@ -85,15 +85,27 @@ class LocalPreparedStatement implements D1PreparedStatement {
     }
 
     if (this.query.includes("insert into analyses")) {
-      const [domain, url, timestamp, isReal] = this.values;
+      const [domain, url] = this.values;
+      console.log('Inserting analysis:', { domain, url });
+
+      // Check for existing entry in the last minute
+      const recentEntry = Array.from(analyses.values()).find(entry => {
+        const age = Date.now() - new Date(entry.timestamp).getTime();
+        return entry.domain === domain && age < 60000;
+      });
+
+      if (recentEntry) {
+        console.log('Found recent entry, skipping insert');
+        return { results: [], success: true, changes: 0 };
+      }
+
       const id = analysisId++;
-      console.log('Inserting analysis:', { domain, url, timestamp, isReal });
       const entry = {
         id,
         domain,
         url,
-        timestamp: timestamp || new Date().toISOString(),
-        is_real: isReal === 1 || isReal === true
+        timestamp: new Date().toISOString(),
+        is_real: true // Always true for real entries
       };
       console.log('Created entry:', entry);
       analyses.set(id.toString(), entry);
