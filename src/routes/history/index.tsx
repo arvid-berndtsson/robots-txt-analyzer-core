@@ -1,31 +1,49 @@
-import { component$ } from "@builder.io/qwik";
+import { component$, useSignal, useTask$ } from "@builder.io/qwik";
 import type { DocumentHead } from "@builder.io/qwik-city";
-import { exampleUrls } from "~/data/example-urls";
-
-const MAX_HISTORY_ITEMS = 25;
-const MAX_AGE_MINUTES = 60;
+import { server$ } from "@builder.io/qwik-city";
 
 interface HistoryEntry {
   url: string;
-  date: string;
+  domain: string;
+  timestamp: string;
 }
 
-// Create a new set of random entries
-const createNewEntries = (count: number): HistoryEntry[] => {
-  const now = new Date();
-  return [...exampleUrls]
-    .sort(() => Math.random() - 0.5)
-    .slice(0, count)
-    .map(url => {
-      const minutesAgo = Math.floor(Math.random() * MAX_AGE_MINUTES);
-      const date = new Date(now.getTime() - minutesAgo * 60000);
-      return { url, date: date.toISOString() };
-    })
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-};
+const fetchHistory = server$(async function() {
+  const origin = this.env.get("ORIGIN");
+  const apiKey = this.env.get("API_KEY");
+
+  if (!origin || !apiKey) {
+    throw new Error("Missing required environment variables");
+  }
+
+  const response = await fetch(`${origin}/api/v1/history`, {
+    headers: {
+      "X-API-Key": apiKey
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to fetch history");
+  }
+
+  return await response.json() as HistoryEntry[];
+});
 
 export default component$(() => {
-  const entries = createNewEntries(MAX_HISTORY_ITEMS);
+  const history = useSignal<HistoryEntry[]>([]);
+  const error = useSignal("");
+  const isLoading = useSignal(true);
+
+  useTask$(async () => {
+    try {
+      history.value = await fetchHistory();
+    } catch (err) {
+      console.error("Error fetching history:", err);
+      error.value = err instanceof Error ? err.message : "Failed to load history";
+    } finally {
+      isLoading.value = false;
+    }
+  });
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -45,40 +63,46 @@ export default component$(() => {
           Recent Analyses
         </h1>
         <p class="text-base text-gray-500">
-          Example analyses to demonstrate the tool's capabilities.
+          View recently analyzed robots.txt files.
         </p>
       </div>
 
-      <div class="rounded-2xl border border-gray-200">
-        <div class="max-h-[600px] overflow-y-auto overscroll-contain scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
-          <div class="divide-y divide-gray-200">
-            {entries.map((entry) => (
-              <div key={entry.url + entry.date} class="flex items-center justify-between p-4 hover:bg-gray-50">
-                <div class="min-w-0 flex-1">
-                  <div class="flex items-center">
-                    <span class="text-base text-gray-900">
-                      {entry.url}
-                    </span>
+      {isLoading.value ? (
+        <div class="flex justify-center py-12">
+          <div class="h-8 w-8 animate-spin rounded-full border-[3px] border-black border-t-transparent"></div>
+        </div>
+      ) : error.value ? (
+        <div class="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-600">
+          {error.value}
+        </div>
+      ) : (
+        <div class="rounded-2xl border border-gray-200">
+          <div class="max-h-[600px] overflow-y-auto overscroll-contain scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+            <div class="divide-y divide-gray-200">
+              {history.value.map((entry) => (
+                <div key={entry.url + entry.timestamp} class="flex items-center justify-between p-4 hover:bg-gray-50">
+                  <div class="min-w-0 flex-1">
+                    <div class="flex items-center">
+                      <span class="text-base text-gray-900">
+                        {entry.domain}
+                      </span>
+                    </div>
+                    <p class="text-sm text-gray-500 mt-1">
+                      {formatDate(entry.timestamp)}
+                    </p>
                   </div>
-                  <p class="text-sm text-gray-500 mt-1">
-                    {formatDate(entry.date)}
-                  </p>
+                  <a
+                    href={`/analyzer?url=${entry.url}`}
+                    class="ml-4 rounded-full bg-white px-4 py-2 text-sm font-semibold text-black shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    Analyze Again
+                  </a>
                 </div>
-                <a
-                  href={`/analyzer?url=${entry.url}`}
-                  class="ml-4 rounded-full bg-white px-4 py-2 text-sm font-semibold text-black shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 whitespace-nowrap"
-                >
-                  Analyze Again
-                </a>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
-      </div>
-
-      <p class="mt-8 text-sm text-center text-gray-500">
-        Note: These are example entries. The history feature will track actual analyses in the future.
-      </p>
+      )}
     </div>
   );
 });
@@ -88,7 +112,7 @@ export const head: DocumentHead = {
   meta: [
     {
       name: "description",
-      content: "View recent robots.txt analyses and explore example analyses from various websites.",
+      content: "View recent robots.txt analyses and their results.",
     },
     {
       name: "robots",

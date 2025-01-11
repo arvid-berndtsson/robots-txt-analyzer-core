@@ -22,6 +22,7 @@ A modern web tool for analyzing robots.txt files, built with Qwik and deployed o
   ```
   ORIGIN="http://localhost:5173"
   API_KEY="your-api-key"
+  HISTORY_KV="NAME_OF_CLOUDFLARE_KV_NAMESPACE"
   ```
 
 ### Getting Started
@@ -58,6 +59,18 @@ This project is deployed on Cloudflare Pages. The build configuration is:
 - Environment variables:
   - `ORIGIN`: Your production URL
   - `API_KEY`: Your API key for the analyzer
+
+Note: The `HISTORY_KV` is set under bindings in the Cloudflare dashboard.
+
+### Cleanup
+
+To cleanup old cache entries, you can run the cleanup endpoint. This will delete all cache entries older than 24 hours.
+
+```shell
+curl -X GET https://robots-txt.arvid.tech/api/v1/cleanup
+```
+
+Recommendation is to call this using a cron job.
 
 ## Project Structure
 
