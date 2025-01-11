@@ -34,6 +34,7 @@ const fetchHistory = server$(async function() {
 export default component$(() => {
   const entries = useSignal<HistoryEntry[]>([]);
   const error = useSignal<string | null>(null);
+  const isLoading = useSignal(true);
 
   // Fetch history entries when the component mounts
   useTask$(async () => {
@@ -43,18 +44,22 @@ export default component$(() => {
     } catch (err) {
       console.error('Error fetching history:', err);
       error.value = err instanceof Error ? err.message : 'Failed to load history. Please try again later.';
+    } finally {
+      isLoading.value = false;
     }
   });
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
-    return date.toLocaleString('en-US', { 
-      month: 'short', 
-      day: 'numeric', 
-      hour: 'numeric', 
+    return new Intl.DateTimeFormat('sv-SE', { 
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
       minute: '2-digit',
-      hour12: true 
-    });
+      second: '2-digit',
+      hour12: false
+    }).format(date);
   };
 
   return (
@@ -68,7 +73,11 @@ export default component$(() => {
         </p>
       </div>
 
-      {error.value ? (
+      {isLoading.value ? (
+        <div class="flex justify-center items-center py-12">
+          <div class="h-8 w-8 animate-spin rounded-full border-[3px] border-black border-t-transparent"></div>
+        </div>
+      ) : error.value ? (
         <div class="text-center text-red-600 mb-4">{error.value}</div>
       ) : (
         <div class="rounded-2xl border border-gray-200">

@@ -18,17 +18,19 @@ export const onGet: RequestHandler = async ({ json, env, request }) => {
 
   try {
     // Clean up old cache entries (older than 24 hours)
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     const { changes: cacheDeleted } = await db.prepare(`
       DELETE FROM cache 
-      WHERE timestamp < datetime('now', '-24 hours')
-    `).run();
+      WHERE timestamp < ?
+    `).bind(oneDayAgo).run();
 
     // Clean up fake history entries (older than 2 hours)
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
     const { changes: fakeDeleted } = await db.prepare(`
       DELETE FROM analyses 
       WHERE is_real = 0 
-      AND timestamp < datetime('now', '-2 hours')
-    `).run();
+      AND timestamp < ?
+    `).bind(twoHoursAgo).run();
 
     json(200, {
       success: true,

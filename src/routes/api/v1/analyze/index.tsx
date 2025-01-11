@@ -112,10 +112,13 @@ export const onPost: RequestHandler = async ({ json, parseBody, env, request }) 
       const parsedRules = parseRobotsTxt(content);
       const analysis = analyzeRobotsTxt(parsedRules, normalizedUrl);
 
+      // Generate timestamp once and reuse it
+      const timestamp = new Date().toISOString();
+
       // Generate export data
       const jsonData = JSON.stringify({
         url: normalizedUrl,
-        timestamp: new Date().toISOString(),
+        timestamp,
         analysis: {
           summary: analysis.summary,
           rules: analysis.rules,
@@ -140,7 +143,7 @@ export const onPost: RequestHandler = async ({ json, parseBody, env, request }) 
       ]);
       const csvData = [
         ['# Analysis generated using Robots.txt Analyzer (https://robots-txt.arvid.tech/) by Arvid Berndtsson'],
-        ['# Generated at: ' + new Date().toISOString()],
+        ['# Generated at: ' + timestamp],
         [''],
         headers,
         ...rows
@@ -149,7 +152,7 @@ export const onPost: RequestHandler = async ({ json, parseBody, env, request }) 
       result = { 
         url: normalizedUrl,
         robotsUrl,
-        timestamp: new Date().toISOString(),
+        timestamp,
         rules: analysis.rules,
         summary: analysis.summary,
         sitemaps: analysis.sitemaps,
@@ -164,16 +167,17 @@ export const onPost: RequestHandler = async ({ json, parseBody, env, request }) 
       try {
         // Save to cache (for quick lookups)
         await db.prepare(
-          "INSERT OR REPLACE INTO cache (domain, result, timestamp) VALUES (?, ?, datetime('now'))"
-        ).bind(domain, JSON.stringify(result)).run();
+          "INSERT OR REPLACE INTO cache (domain, result, timestamp) VALUES (?, ?, ?)"
+        ).bind(domain, JSON.stringify(result), timestamp).run();
 
         // Save to history (as a log entry)
         await db.prepare(`
           INSERT INTO analyses (domain, url, timestamp, is_real) 
-          VALUES (?, ?, datetime('now'), 1)
+          VALUES (?, ?, ?, 1)
         `).bind(
           domain,
-          normalizedUrl
+          normalizedUrl,
+          timestamp
         ).run();
       } catch (dbError) {
         console.error('Database error:', dbError);
