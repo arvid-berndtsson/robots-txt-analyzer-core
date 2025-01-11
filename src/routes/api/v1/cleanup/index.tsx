@@ -28,7 +28,7 @@ export const onGet: RequestHandler = async ({ json, env, request }) => {
     const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
     const { changes: fakeDeleted } = await db.prepare(`
       DELETE FROM analyses 
-      WHERE is_real = 0 
+      WHERE is_real = false 
       AND timestamp < ?
     `).bind(twoHoursAgo).run();
 

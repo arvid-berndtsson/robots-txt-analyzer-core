@@ -97,19 +97,18 @@ export const onGet: RequestHandler = async ({ json, env, request }) => {
       new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
     );
 
-    // Insert all fake entries in a single batch
-    const placeholders = fakeEntries.map(() => '(?, ?, ?, ?)').join(', ');
-    const values = fakeEntries.flatMap(entry => [
-      entry.domain,
-      entry.url,
-      entry.timestamp,
-      false // Explicitly set is_real to false for fake entries
-    ]);
-
-    await db.prepare(`
-      INSERT INTO analyses (domain, url, timestamp, is_real) 
-      VALUES ${placeholders}
-    `).bind(...values).run();
+    // Insert fake entries one by one (more compatible with D1)
+    for (const entry of fakeEntries) {
+      await db.prepare(`
+        INSERT INTO analyses (domain, url, timestamp, is_real) 
+        VALUES (?, ?, ?, ?)
+      `).bind(
+        entry.domain,
+        entry.url,
+        entry.timestamp,
+        0
+      ).run();
+    }
 
     // Get all entries including the newly added fake ones
     const { results: allEntries } = await db.prepare(`
