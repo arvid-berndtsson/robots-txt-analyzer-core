@@ -70,7 +70,9 @@ This project is deployed on Cloudflare Pages. The build configuration is:
 - `wrangler.toml`: Your Cloudflare D1 database ID
   - `wrangler.toml.example`: Example `wrangler.toml` file
 
-Note: The `HISTORY_KV` is set under bindings in the Cloudflare dashboard.
+Notes:
+- Set the `DB` variable in the `.env.local` file to your Cloudflare D1 database ID.
+- For initially setup, push the DB schema to cloudflare, run `npx wrangler d1 execute robots-txt-analyzer --file=./db/schema.sql --remote`.
 
 ### Cleanup
 
