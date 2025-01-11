@@ -173,11 +173,12 @@ export const onPost: RequestHandler = async ({ json, parseBody, env, request }) 
         // Save to history (as a log entry)
         await db.prepare(`
           INSERT INTO analyses (domain, url, timestamp, is_real) 
-          VALUES (?, ?, ?, 1)
+          VALUES (?, ?, ?, ?)
         `).bind(
           domain,
           normalizedUrl,
-          timestamp
+          timestamp,
+          1
         ).run();
       } catch (dbError) {
         console.error('Database error:', dbError);
