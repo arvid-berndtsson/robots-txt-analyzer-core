@@ -3,9 +3,9 @@ import { type DocumentHead } from "@builder.io/qwik-city";
 import { HistoryList } from "~/components/history-list/history-list";
 
 export default component$(() => {
-  const resource = useResource$<void>(async () => {
-    // This resource will be resolved when the component is mounted
-    // allowing instant navigation while content loads
+  const resource = useResource$<boolean>(async () => {
+    // Resolve immediately to prevent navigation blocking
+    return true;
   });
 
   return (
@@ -22,8 +22,9 @@ export default component$(() => {
       <Resource
         value={resource}
         onPending={() => (
-          <div class="flex items-center justify-center py-12">
+          <div class="flex flex-col items-center justify-center space-y-4 py-12">
             <div class="h-8 w-8 animate-spin rounded-full border-[3px] border-black border-t-transparent"></div>
+            <p class="text-sm text-gray-500">Loading recent analyses...</p>
           </div>
         )}
         onResolved={() => <HistoryList />}

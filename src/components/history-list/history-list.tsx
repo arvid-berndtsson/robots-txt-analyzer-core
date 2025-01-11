@@ -1,4 +1,4 @@
-import { component$, useSignal, useTask$ } from "@builder.io/qwik";
+import { component$, useSignal, useTask$, isBrowser } from "@builder.io/qwik";
 import { server$, Link } from "@builder.io/qwik-city";
 
 interface HistoryEntry {
@@ -6,6 +6,11 @@ interface HistoryEntry {
   domain: string;
   timestamp: string;
 }
+
+// Cache key for local storage
+const HISTORY_CACHE_KEY = "robots_analyzer_history_cache";
+const HISTORY_CACHE_TIMESTAMP_KEY = "robots_analyzer_history_cache_timestamp";
+const CACHE_TTL = 30000; // 30 seconds
 
 const fetchHistory = server$(async function () {
   const origin = this.env.get("CF_PAGES_URL") || this.env.get("ORIGIN");
@@ -28,23 +33,65 @@ const fetchHistory = server$(async function () {
   return response.json() as Promise<HistoryEntry[]>;
 });
 
+// Helper function to safely interact with localStorage
+const storage = {
+  get: (key: string) => {
+    if (!isBrowser) return null;
+    try {
+      return localStorage.getItem(key);
+    } catch (err) {
+      console.warn("Failed to read from localStorage:", err);
+      return null;
+    }
+  },
+  set: (key: string, value: string) => {
+    if (!isBrowser) return;
+    try {
+      localStorage.setItem(key, value);
+    } catch (err) {
+      console.warn("Failed to write to localStorage:", err);
+    }
+  },
+};
+
 export const HistoryList = component$(() => {
   const entries = useSignal<HistoryEntry[]>([]);
   const error = useSignal<string | null>(null);
+  const isLoading = useSignal(true);
 
+  // Combined task for both cache and fresh data
   useTask$(async ({ cleanup }) => {
     const controller = new AbortController();
     cleanup(() => controller.abort());
 
+    // Try to load from cache first
+    const cachedData = storage.get(HISTORY_CACHE_KEY);
+    const cachedTimestamp = storage.get(HISTORY_CACHE_TIMESTAMP_KEY);
+
+    if (cachedData && cachedTimestamp) {
+      const timestamp = parseInt(cachedTimestamp, 10);
+      if (Date.now() - timestamp < CACHE_TTL) {
+        entries.value = JSON.parse(cachedData);
+        isLoading.value = false;
+      }
+    }
+
+    // Always fetch fresh data
     try {
       const data = await fetchHistory();
       entries.value = data;
+
+      // Update cache
+      storage.set(HISTORY_CACHE_KEY, JSON.stringify(data));
+      storage.set(HISTORY_CACHE_TIMESTAMP_KEY, Date.now().toString());
     } catch (err) {
       console.error("Error fetching history:", err);
       error.value =
         err instanceof Error
           ? err.message
           : "Failed to load history. Please try again later.";
+    } finally {
+      isLoading.value = false;
     }
   });
 
@@ -80,6 +127,15 @@ export const HistoryList = component$(() => {
       year: date.getFullYear() !== now.getFullYear() ? "numeric" : undefined,
     }).format(date);
   };
+
+  if (isLoading.value) {
+    return (
+      <div class="flex flex-col items-center justify-center space-y-4 py-12">
+        <div class="h-8 w-8 animate-spin rounded-full border-[3px] border-black border-t-transparent"></div>
+        <p class="text-sm text-gray-500">Loading recent analyses...</p>
+      </div>
+    );
+  }
 
   if (error.value) {
     return <div class="mb-4 text-center text-red-600">{error.value}</div>;
