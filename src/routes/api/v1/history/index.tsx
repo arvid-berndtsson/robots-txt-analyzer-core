@@ -12,11 +12,9 @@ interface HistoryEntry {
 
 // Generate a fake entry
 function generateFakeEntry(timestamp: Date): HistoryEntry {
-  const randomUrl = exampleUrls[Math.floor(Math.random() * exampleUrls.length)];
+  const url = exampleUrls[Math.floor(Math.random() * exampleUrls.length)];
   // Ensure URL has a protocol
-  const fullUrl = randomUrl.startsWith("http")
-    ? randomUrl
-    : `https://${randomUrl}`;
+  const fullUrl = url.startsWith("http") ? url : `https://${url}`;
   return {
     url: fullUrl,
     domain: new URL(fullUrl).hostname,
@@ -59,18 +57,41 @@ export const onGet: RequestHandler = async ({ json, env, request }) => {
     const { results: recentEntries } = await stmt.all<HistoryEntry>();
     console.log("History: Found", recentEntries.length, "recent entries");
 
-    // If we have enough recent entries, return them
-    if (recentEntries.length >= 25) {
+    // Check if we need to generate new entries
+    let needNewEntries = recentEntries.length < 25;
+
+    // If we have entries, check the age of the most recent one
+    if (recentEntries.length > 0) {
+      const mostRecent = new Date(recentEntries[0].timestamp);
+      const ageInMinutes = (Date.now() - mostRecent.getTime()) / (1000 * 60);
+      console.log(
+        "History: Most recent entry is",
+        Math.round(ageInMinutes),
+        "minutes old",
+      );
+
+      // If the most recent entry is older than 30 minutes, generate new ones
+      if (ageInMinutes > 30) {
+        needNewEntries = true;
+        console.log(
+          "History: Most recent entry is too old, generating new entries",
+        );
+      }
+    }
+
+    // If we don't need new entries, return what we have
+    if (!needNewEntries) {
       json(200, recentEntries);
       return;
     }
 
-    // Delete any existing fake entries
+    // Delete any existing fake entries older than 24 hours
     await db
       .prepare(
         `
       DELETE FROM analyses 
-      WHERE is_real = false
+      WHERE is_real = false 
+      AND timestamp < datetime('now', '-24 hours')
     `,
       )
       .run();
@@ -82,18 +103,20 @@ export const onGet: RequestHandler = async ({ json, env, request }) => {
 
     // Create user session patterns (reduced and simplified)
     const sessions = [
-      { size: 3, timeSpan: 120000 }, // Someone scanning 3 sites in 2 minutes
+      { size: 3, timeSpan: 120000 }, // Someone comparing 3 sites in 2 minutes
       { size: 2, timeSpan: 60000 }, // Quick check of 2 sites in 1 minute
-      { size: 4, timeSpan: 180000 }, // 4 scans in 3 minutes
-      { size: 2, timeSpan: 45000 }, // 2 quick comparisons
-      { size: 3, timeSpan: 120000 }, // 3 scans in 2 minutes
+      { size: 4, timeSpan: 180000 }, // Thorough comparison of 4 sites in 3 minutes
+      { size: 2, timeSpan: 45000 }, // Very quick comparison of 2 sites
+      { size: 3, timeSpan: 120000 }, // Another 3-site comparison
+      { size: 2, timeSpan: 90000 }, // Medium-paced comparison
+      { size: 3, timeSpan: 150000 }, // Detailed look at 3 sites
     ];
 
     const fakeEntries: HistoryEntry[] = [];
     let entriesNeeded = neededEntries;
     let currentTime = now;
 
-    // Distribute sessions across the 2-hour window
+    // Distribute sessions across the 2-hour window with more natural gaps
     while (entriesNeeded > 0 && sessions.length > 0) {
       // Pick a random session pattern
       const sessionIndex = Math.floor(Math.random() * sessions.length);
@@ -105,8 +128,8 @@ export const onGet: RequestHandler = async ({ json, env, request }) => {
         continue;
       }
 
-      // Add some random gap between sessions (2-15 minutes)
-      currentTime -= Math.floor(Math.random() * 780000) + 120000;
+      // Add more realistic gap between sessions (5-20 minutes)
+      currentTime -= Math.floor(Math.random() * 900000) + 300000;
 
       // Generate entries for this session
       for (let i = 0; i < session.size; i++) {
@@ -124,7 +147,7 @@ export const onGet: RequestHandler = async ({ json, env, request }) => {
 
     // If we still need entries, add some individual scans
     while (entriesNeeded > 0) {
-      // Random time in the remaining window
+      // Random time in the remaining window with better distribution
       const randomTime = Math.floor(Math.random() * 7200000);
       const timestamp = new Date(now - randomTime);
       fakeEntries.push(generateFakeEntry(timestamp));
