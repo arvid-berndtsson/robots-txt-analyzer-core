@@ -51,8 +51,47 @@ interface RobotsAnalysisResult {
   };
 }
 
+type AnalysisSuccess = {
+  success: true;
+  data: RobotsAnalysisResult;
+};
+
+type AnalysisError = {
+  success: false;
+  error: string;
+};
+
+type AnalysisResponse = AnalysisSuccess | AnalysisError;
+
 export const useUrlParam = routeLoader$(({ url }) => {
   return url.searchParams.get("url") || "";
+});
+
+// Add a loader to handle initial analysis
+export const useServerAnalysis = routeLoader$(async ({ url }) => {
+  const urlParam = url.searchParams.get("url");
+  if (!urlParam) return null;
+
+  try {
+    const result = await analyzeRobotsTxt(urlParam);
+    if (result && "error" in result) {
+      return {
+        success: false,
+        error: result.error,
+      } satisfies AnalysisError;
+    }
+    return {
+      success: true,
+      data: result,
+    } satisfies AnalysisSuccess;
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "Failed to analyze robots.txt";
+    return {
+      success: false,
+      error: message,
+    } satisfies AnalysisError;
+  }
 });
 
 const analyzeSchema = z.object({
@@ -102,10 +141,15 @@ const analyzeRobotsTxt = server$(async function (inputUrl: string) {
 
 export default component$(() => {
   const urlParam = useUrlParam();
+  const serverAnalysis = useServerAnalysis();
   const initialAnalysis = useInitialAnalysis();
   const url = useSignal(urlParam.value);
-  const result = useSignal<RobotsAnalysisResult | null>(null);
-  const error = useSignal("");
+  const result = useSignal<RobotsAnalysisResult | null>(
+    serverAnalysis.value?.success ? serverAnalysis.value.data : null,
+  );
+  const error = useSignal(
+    !serverAnalysis.value?.success ? serverAnalysis.value?.error || "" : "",
+  );
   const isLoading = useSignal(false);
   const navigate = useNavigate();
 
@@ -113,8 +157,9 @@ export default component$(() => {
   useTask$(({ track }) => {
     const currentUrl = track(() => urlParam.value);
     const isBrowser = track(() => typeof window !== "undefined");
+    const serverResult = track(() => serverAnalysis.value);
 
-    if (currentUrl && isBrowser) {
+    if (currentUrl && isBrowser && !serverResult) {
       console.log("Running initial analysis for URL:", currentUrl);
       url.value = currentUrl;
       isLoading.value = true;
