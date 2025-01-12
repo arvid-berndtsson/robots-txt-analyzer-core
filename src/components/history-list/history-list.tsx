@@ -167,7 +167,8 @@ export const HistoryList = component$(() => {
                 </p>
               </div>
               <Link
-                href={`/analyzer?url=${entry.url}`}
+                href={`/analyzer?url=${encodeURIComponent(entry.url)}`}
+                data-analyze="true"
                 class="ml-4 whitespace-nowrap rounded-full bg-white px-4 py-2 text-sm font-semibold text-black shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50"
               >
                 Analyze Again
