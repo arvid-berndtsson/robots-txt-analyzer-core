@@ -515,23 +515,5 @@ export const head: DocumentHead = {
       content:
         "robots.txt analyzer, SEO tool, website crawler, robots.txt validator, SEO analysis, web crawling",
     },
-    {
-      property: "og:title",
-      content: "Analyze Your Robots.txt File - Free Online Tool",
-    },
-    {
-      property: "og:description",
-      content:
-        "Analyze your robots.txt file instantly with our free tool. Get detailed insights, validate syntax, and improve your website's SEO performance.",
-    },
-    {
-      name: "twitter:title",
-      content: "Analyze Your Robots.txt File - Free Online Tool",
-    },
-    {
-      name: "twitter:description",
-      content:
-        "Analyze your robots.txt file instantly with our free tool. Get detailed insights, validate syntax, and improve your website's SEO performance.",
-    },
   ],
 };
