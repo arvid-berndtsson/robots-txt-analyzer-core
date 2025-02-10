@@ -163,28 +163,90 @@ export default component$(() => {
 
       {result.value && (
         <div class="mt-6 space-y-4 sm:mt-8 sm:space-y-6">
-          <div class="flex items-center justify-between">
-            <div>
-              <h2 class="text-xl font-semibold text-gray-900 sm:text-2xl">
-                Analysis Results
-              </h2>
-              <a
-                href={result.value.robotsUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                class="text-sm text-gray-600 hover:text-black hover:underline"
-              >
-                View robots.txt
-              </a>
-            </div>
-            <div class="flex items-center gap-4">
-              <div class="flex items-center gap-2">
-                <span class="text-lg">{result.value.summary.status}</span>
-                <span class="text-sm text-gray-600">
-                  Score: {result.value.summary.score}/100
-                </span>
+          {/* Main Answer Card */}
+          <div class="overflow-hidden rounded-2xl border bg-white">
+            <div class="border-b border-gray-200 bg-gray-50 px-4 py-3">
+              <div class="flex items-center justify-between">
+                <h2 class="text-xl font-semibold text-gray-900">
+                  Can I Scrape This Website?
+                </h2>
+                <div class="flex items-center gap-2">
+                  <span class="text-lg">{result.value.summary.status}</span>
+                  <span class="text-sm text-gray-600">
+                    Score: {result.value.summary.score}/100
+                  </span>
+                </div>
               </div>
-              <div class="flex gap-2">
+            </div>
+            <div class="px-4 py-3">
+              {(() => {
+                const hasGlobalDisallow = result.value.rules.some(
+                  (rule) => rule.isGlobal && rule.disallowedPaths.includes("/"),
+                );
+                const hasGlobalAllow = result.value.rules.some(
+                  (rule) => rule.isGlobal && rule.allowedPaths.includes("/"),
+                );
+                const hasRestrictions = result.value.rules.some(
+                  (rule) => rule.disallowedPaths.length > 0,
+                );
+
+                if (hasGlobalDisallow) {
+                  return (
+                    <div class="flex items-center gap-2 text-red-600">
+                      <span class="text-lg">❌</span>
+                      <p class="font-medium">
+                        No, this website explicitly prohibits scraping of all
+                        pages.
+                      </p>
+                    </div>
+                  );
+                } else if (hasGlobalAllow) {
+                  return (
+                    <div class="flex items-center gap-2 text-green-600">
+                      <span class="text-lg">✅</span>
+                      <p class="font-medium">
+                        Yes, this website explicitly allows scraping.
+                      </p>
+                    </div>
+                  );
+                } else if (hasRestrictions) {
+                  return (
+                    <div class="flex items-center gap-2 text-yellow-600">
+                      <span class="text-lg">⚠️</span>
+                      <p class="font-medium">
+                        Yes, but with restrictions. Some paths are disallowed -
+                        check the rules below.
+                      </p>
+                    </div>
+                  );
+                } else {
+                  return (
+                    <div class="flex items-center gap-2 text-blue-600">
+                      <span class="text-lg">ℹ️</span>
+                      <p class="font-medium">
+                        Yes, no explicit restrictions found. However, always
+                        respect the website's terms of service.
+                      </p>
+                    </div>
+                  );
+                }
+              })()}
+              {result.value.rules.some((rule) => rule.crawlDelay) && (
+                <p class="mt-2 text-sm text-gray-600">
+                  <strong>Note:</strong> Please respect the crawl delay settings
+                  specified in the rules below.
+                </p>
+              )}
+              <div class="mt-3 flex items-center gap-2 border-t border-gray-100 pt-3 text-sm text-gray-600">
+                <a
+                  href={result.value.robotsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="hover:text-black hover:underline"
+                >
+                  View robots.txt
+                </a>
+                <span>•</span>
                 <button
                   preventdefault:click
                   onClick$={$(() => {
@@ -203,11 +265,12 @@ export default component$(() => {
                       console.error("Failed to export JSON:", error);
                     }
                   })}
-                  class="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition-all duration-200 hover:bg-gray-50 active:scale-95 active:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  class="hover:text-black hover:underline disabled:opacity-50"
                   disabled={!result.value.export.jsonData}
                 >
                   Export JSON
                 </button>
+                <span>•</span>
                 <button
                   preventdefault:click
                   onClick$={$(() => {
@@ -226,7 +289,7 @@ export default component$(() => {
                       console.error("Failed to export CSV:", error);
                     }
                   })}
-                  class="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition-all duration-200 hover:bg-gray-50 active:scale-95 active:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  class="hover:text-black hover:underline disabled:opacity-50"
                   disabled={!result.value.export.csvData}
                 >
                   Export CSV
@@ -236,37 +299,6 @@ export default component$(() => {
           </div>
 
           <div class="grid grid-cols-1 gap-6">
-            {/* Summary Card */}
-            <div class="overflow-hidden rounded-2xl border border-gray-200 bg-white">
-              <div class="border-b border-gray-200 bg-gray-50 px-4 py-3">
-                <h3 class="text-base font-semibold text-gray-900">Summary</h3>
-              </div>
-              <div class="px-4 py-3">
-                <dl class="space-y-2 text-sm text-gray-700">
-                  <div>
-                    <dt class="inline font-medium">Total Rules:</dt>
-                    <dd class="ml-1 inline">
-                      {result.value.summary.totalRules}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt class="inline font-medium">Global Rule:</dt>
-                    <dd class="ml-1 inline">
-                      {result.value.summary.hasGlobalRule
-                        ? "✅ Present"
-                        : "❌ Missing"}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt class="inline font-medium">Total Sitemaps:</dt>
-                    <dd class="ml-1 inline">
-                      {result.value.summary.totalSitemaps}
-                    </dd>
-                  </div>
-                </dl>
-              </div>
-            </div>
-
             {/* Rules Card */}
             <div class="overflow-hidden rounded-2xl border border-gray-200 bg-white">
               <div class="border-b border-gray-200 bg-gray-50 px-4 py-3">
@@ -338,6 +370,39 @@ export default component$(() => {
                     )}
                   </div>
                 ))}
+              </div>
+            </div>
+
+            {/* Summary Card */}
+            <div class="overflow-hidden rounded-2xl border border-gray-200 bg-white">
+              <div class="border-b border-gray-200 bg-gray-50 px-4 py-3">
+                <h3 class="text-base font-semibold text-gray-900">
+                  Technical Summary
+                </h3>
+              </div>
+              <div class="px-4 py-3">
+                <dl class="space-y-2 text-sm text-gray-700">
+                  <div>
+                    <dt class="inline font-medium">Total Rules:</dt>
+                    <dd class="ml-1 inline">
+                      {result.value.summary.totalRules}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt class="inline font-medium">Global Rule:</dt>
+                    <dd class="ml-1 inline">
+                      {result.value.summary.hasGlobalRule
+                        ? "✅ Present"
+                        : "❌ Missing"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt class="inline font-medium">Total Sitemaps:</dt>
+                    <dd class="ml-1 inline">
+                      {result.value.summary.totalSitemaps}
+                    </dd>
+                  </div>
+                </dl>
               </div>
             </div>
 
