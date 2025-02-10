@@ -525,6 +525,22 @@ export const head: DocumentHead = {
         "Analyze your robots.txt file instantly with our free tool. Get detailed insights, validate syntax, and improve your website's SEO performance.",
     },
     {
+      property: "og:image",
+      content: "/og-image.png",
+    },
+    {
+      property: "og:image:alt",
+      content: "Robots.txt Analyzer Tool Interface",
+    },
+    {
+      property: "og:type",
+      content: "website",
+    },
+    {
+      name: "twitter:card",
+      content: "summary_large_image",
+    },
+    {
       name: "twitter:title",
       content: "Analyze Your Robots.txt File - Free Online Tool",
     },
@@ -532,6 +548,10 @@ export const head: DocumentHead = {
       name: "twitter:description",
       content:
         "Analyze your robots.txt file instantly with our free tool. Get detailed insights, validate syntax, and improve your website's SEO performance.",
+    },
+    {
+      name: "twitter:image",
+      content: "/og-image.png",
     },
   ],
 };
