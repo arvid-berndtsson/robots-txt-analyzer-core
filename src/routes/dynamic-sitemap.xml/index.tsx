@@ -13,11 +13,11 @@ export const onRequest: RequestHandler = ({ pathname, redirect }) => {
 function normalizePath(path: string): string {
   // Ensure path starts with /
   const withLeadingSlash = path.startsWith("/") ? path : `/${path}`;
-  
+
   // Add trailing slash if not root and doesn't end with slash
   if (withLeadingSlash === "/") return withLeadingSlash;
-  return withLeadingSlash.endsWith("/") 
-    ? withLeadingSlash 
+  return withLeadingSlash.endsWith("/")
+    ? withLeadingSlash
     : `${withLeadingSlash}/`;
 }
 
@@ -32,38 +32,41 @@ export const onGet: RequestHandler = async ({ env, send }) => {
     const predefinedRoutes = [
       { loc: "/", priority: 1.0 },
       { loc: "/about/", priority: 0.8 },
-      { loc: "/learn/", priority: 0.8 },
+      { loc: "/what-is-robots-txt/", priority: 0.8 },
       { loc: "/analyzer/", priority: 0.9 },
       { loc: "/history/", priority: 0.7 },
     ];
 
     // Create a Set of normalized predefined paths for filtering
-    const predefinedPaths = new Set(predefinedRoutes.map(route => normalizePath(route.loc)));
+    const predefinedPaths = new Set(
+      predefinedRoutes.map((route) => normalizePath(route.loc)),
+    );
 
     // Get unique normalized routes from Qwik City plan
     const uniqueRoutes = new Set(
       routes
         .map(([route]) => normalizePath(route as string))
-        .filter(route => 
-          !predefinedPaths.has(route) && // Exclude predefined routes
-          !route.includes("[") && // Exclude parameter routes
-          !route.includes("api/") && // Exclude API routes
-          !route.includes("sitemap.xml") && // Exclude sitemap itself
-          !route.includes("robots.txt") // Exclude robots.txt
-        )
+        .filter(
+          (route) =>
+            !predefinedPaths.has(route) && // Exclude predefined routes
+            !route.includes("[") && // Exclude parameter routes
+            !route.includes("api/") && // Exclude API routes
+            !route.includes("sitemap.xml") && // Exclude sitemap itself
+            !route.includes("robots.txt"), // Exclude robots.txt
+        ),
     );
 
     // Create final sitemap entries
     const sitemapEntries = [
       ...predefinedRoutes,
-      ...Array.from(uniqueRoutes).map(route => ({
+      ...Array.from(uniqueRoutes).map((route) => ({
         loc: route,
         priority: 0.5,
-      }))
+      })),
     ];
 
     const sitemap = createSitemap(sitemapEntries, origin);
-    
+
     if (!sitemap) {
       throw new Error("Failed to generate sitemap");
     }
@@ -75,7 +78,7 @@ export const onGet: RequestHandler = async ({ env, send }) => {
           "Cache-Control": "public, max-age=3600",
           "X-Robots-Tag": "noindex",
         },
-      })
+      }),
     );
   } catch (error) {
     console.error("Error generating sitemap:", error);
@@ -85,7 +88,7 @@ export const onGet: RequestHandler = async ({ env, send }) => {
         headers: {
           "Content-Type": "text/plain; charset=utf-8",
         },
-      })
+      }),
     );
   }
-}; 
+};

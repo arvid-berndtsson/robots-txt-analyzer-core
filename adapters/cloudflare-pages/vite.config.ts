@@ -18,7 +18,7 @@ export default extendConfig(baseConfig, () => {
             '/humans.txt',                 // Humans file
             '/.well-known/security.txt',   // Security file
             '/',                           // Homepage
-            '/learn',                      // Learning page
+            '/what-is-robots-txt',         // Learning page
             '/api/docs',                   // API documentation
             '/about',                      // About page
             '/privacy'                     // Privacy policy
