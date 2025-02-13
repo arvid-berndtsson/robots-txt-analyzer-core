@@ -49,6 +49,14 @@ export const RouterHead = component$(() => {
         />
       ))}
 
+      {/* Umami Analytics */}
+      <script
+        async
+        defer
+        data-website-id="fb5a9fec-8d40-406a-8c9e-f6650438e38c"
+        src="https://kneazle.soulant.com/script.js"
+      />
+
       {head.scripts.map((s) => (
         <script
           key={s.key}
