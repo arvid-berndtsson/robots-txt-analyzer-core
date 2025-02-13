@@ -1,5 +1,6 @@
 import { component$ } from "@builder.io/qwik";
 import { useDocumentHead, useLocation } from "@builder.io/qwik-city";
+import { getUmamiConfig } from "~/utils/env";
 
 /**
  * The RouterHead component is placed inside of the document `<head>` element.
@@ -16,6 +17,12 @@ export const RouterHead = component$(() => {
     { name: "twitter:card", content: "summary_large_image" },
     { name: "twitter:image", content: "/og-image.png" },
   ];
+
+  // Get Umami configuration from environment variables
+  const umamiConfig = getUmamiConfig({
+    UMAMI_SCRIPT_URL: import.meta.env.PUBLIC_UMAMI_SCRIPT_URL,
+    UMAMI_WEBSITE_ID: import.meta.env.PUBLIC_UMAMI_WEBSITE_ID,
+  });
 
   return (
     <>
@@ -49,13 +56,16 @@ export const RouterHead = component$(() => {
         />
       ))}
 
-      {/* Umami Analytics */}
-      <script
-        async
-        defer
-        data-website-id="fb5a9fec-8d40-406a-8c9e-f6650438e38c"
-        src="https://kneazle.soulant.com/script.js"
-      />
+      {/* Umami Analytics - Only included if both environment variables are properly configured */}
+      {umamiConfig && (
+        <script
+          async
+          defer
+          src={umamiConfig.UMAMI_SCRIPT_URL}
+          data-website-id={umamiConfig.UMAMI_WEBSITE_ID}
+          data-domains={loc.url.hostname}
+        />
+      )}
 
       {head.scripts.map((s) => (
         <script
